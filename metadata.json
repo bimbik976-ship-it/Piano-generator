@@ -1,0 +1,7 @@
+{
+  "name": "PETA PIANO AI",
+  "description": "AI generator untuk membuat Suno style prompt khusus musik piano instrumental per batch 25 track.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

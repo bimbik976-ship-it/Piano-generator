@@ -3,10 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 const app = express();
-
-const isDevSandbox = Boolean(process.env.CONTROL_PLANE_PORT || process.env.NGINX_PORT || process.env.DEFAULT_APP_PORT);
-const isProduction = process.env.NODE_ENV === 'production' || !isDevSandbox;
-const PORT = isDevSandbox ? 3000 : (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+const PORT = 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -285,7 +282,7 @@ app.post('/api/kie/responses', handleCodexGeneration);
 app.post('/codex/v1/responses', handleCodexGeneration);
 
 async function startServer() {
-  if (!isProduction) {
+  if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -293,31 +290,16 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = fs.existsSync(path.join(process.cwd(), 'dist'))
-      ? path.join(process.cwd(), 'dist')
-      : __dirname;
+    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`[PETA PIANO AI] Server running on http://0.0.0.0:${PORT}`);
   });
-  server.on('error', (err: any) => {
-    console.error(`[PETA PIANO AI] Server error on port ${PORT}:`, err?.message || err);
-  });
-
-  // In production (Cloud Run), if PORT is not 3000, also listen on 3000 as secondary port if available
-  if (isProduction && PORT !== 3000 && !isDevSandbox) {
-    const secondaryServer = app.listen(3000, '0.0.0.0', () => {
-      console.log(`[PETA PIANO AI] Also listening on secondary port 3000`);
-    });
-    secondaryServer.on('error', (err: any) => {
-      console.log(`[PETA PIANO AI] Secondary port 3000 skipped (${err?.code || err?.message})`);
-    });
-  }
 }
 
 startServer();

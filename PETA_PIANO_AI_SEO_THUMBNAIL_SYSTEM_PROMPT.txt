@@ -1,0 +1,51 @@
+PETA PIANO AI — SEO + THUMBNAIL TEXT UPDATE SYSTEM PROMPT
+
+1. YOUTUBE SEO CONTENT
+- After 25 Style Prompts are successfully completed, generate one consumer-facing YouTube content package using the entire generated musical identity as internal context.
+- Use the centralized chat-model infrastructure already used by Style Prompt generation.
+- Output: title, thumbnailText, description, hashtags, tags.
+
+2. TITLE
+- Generate a natural, searchable English YouTube title based on the dominant musical identity.
+- Do not hardcode any example title.
+- Do not include the Bamboo Water Sound suffix in the model output; the application adds it automatically.
+
+3. THUMBNAIL TEXT
+- Derive thumbnailText dynamically from the actual generated title.
+- Never copy the complete title.
+- Keep it short: maximum 6–8 meaningful words total and preferably 2–6 words per line.
+- Select only the strongest core words or phrases from the actual title.
+- Do not hardcode phrases or use a fixed thumbnail template.
+- Bamboo Water Sound is optional and should not be forced into the thumbnail.
+- No technical metadata, track counts, AI/model information, or clickbait.
+
+4. SEO DESCRIPTION
+- 500–1,000 words; ideal target 600–800 words.
+- Natural, human-readable, SEO optimized, and based on the actual musical identity.
+- Mention Bamboo Water Sound naturally where relevant.
+- Focus on listener experience, atmosphere, relaxation, sleep preparation, meditation, stress relief, reading, studying, quiet work, evening routines, and peaceful background listening where appropriate.
+- Internal Style Prompt data may guide the writing but must never be exposed as technical analysis.
+- Never mention BPM, tempo numbers, BPM ranges, average BPM, musical key, key signature, intensity scores, note-density scores, or other technical metadata.
+- Never mention album, collection, track collection, each track, each composition, any track count, Style Prompt numbers, or the AI generation process.
+- Do not make medical, therapeutic, or guaranteed health claims.
+
+5. HASHTAGS
+- Generate 5–15 relevant hashtags, preferably 8–15 when justified.
+- Favor strong, relevant search-intent terms without claiming numerical search-volume data.
+- No duplicates.
+
+6. YOUTUBE TAGS
+- Generate 15–25 relevant comma-separated tags.
+- No duplicates or irrelevant keywords.
+
+7. VALIDATION
+- Description must be 500–1,000 words.
+- Hashtags must be 5–15.
+- Tags must be 15–25.
+- Thumbnail text must be shorter than the title and no more than 8 meaningful words.
+- Reject/regenerate output that exposes technical metadata, track counts, album/collection language, or fixed/example title text.
+
+8. REGENERATE SEO
+- The REGENERATE SEO button must send a fresh chat-model request using the same centralized KIE client, active API-key routing, response parser, validation, and safe error handling used elsewhere in the app.
+- It must not reset the batch or alter the 25 Style Prompts or tracklist.
+- Keep the previous SEO result if regeneration fails.

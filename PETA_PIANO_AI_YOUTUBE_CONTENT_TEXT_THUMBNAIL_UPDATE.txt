@@ -1,0 +1,39 @@
+PETA PIANO AI — YOUTUBE CONTENT + TEXT ON THUMBNAIL UPDATE
+
+RULE: Preserve all existing Style Prompt #1–#25, batch, tracklist, API architecture, centralized model routing, and UI styling. Only restore/maintain the YouTube Content generation logic and add Text on Thumbnail.
+
+YOUTUBE CONTENT:
+- Available after 25/25 Style Prompts are complete.
+- The Chat Model must analyze ALL Style Prompt #1–#25, never only #25.
+- Generate exactly one YouTube title, one SEO description, 5–15 hashtags, and 15–25 YouTube tags.
+- Title must represent the combined musical identity of #1–#25. The application appends exactly one “ + Bamboo Water Sound” suffix.
+- SEO description: 500–1,000 words; ideal 600–800; natural, human-readable, SEO optimized; consumer-facing; no keyword stuffing; no medical/therapeutic claims.
+- SEO description must not expose BPM, tempo numbers, musical key, technical metadata, intensity scores, track counts, Style Prompt numbers, AI/generation process, or album/collection/catalog language.
+- Hashtags and tags must be based on the combined musical identity of #1–#25. Never invent search-volume numbers.
+- REGENERATE SEO must make a new Chat Model request and create a new title, description, hashtags, and tags while preserving the batch and Style Prompts.
+
+CHAT MODELS:
+- GPT-6 Astra: gpt-6-astra
+- GPT-5.6 Luna: gpt-5-6-luna
+- GPT-5.5: gpt-5-5
+- AUTO uses the existing centralized fallback/routing.
+
+TEXT ON THUMBNAIL — ADDITION ONLY:
+- Add a menu after YouTube Tags.
+- Generate one short thumbnail text from the actual final YouTube title.
+- Do not copy the entire title.
+- Prefer 2–6 meaningful words; maximum 8.
+- One or two lines are allowed.
+- No fixed phrase/template; wording must vary with the actual title.
+- No BPM, key, scores, track counts, Style Prompt references, AI/model/process language.
+- Provide COPY THUMBNAIL TEXT and REGENERATE THUMBNAIL TEXT.
+- REGENERATE THUMBNAIL TEXT must use the same centralized Chat Model and must change only thumbnailText.
+
+FINAL UI ORDER:
+TITLE
+SEO DESCRIPTION
+HASHTAGS
+YOUTUBE TAGS
+TEXT ON THUMBNAIL
+
+Do not insert Text on Thumbnail between Title and SEO Description. Do not create a separate title-generator card that duplicates the YouTube Content title.

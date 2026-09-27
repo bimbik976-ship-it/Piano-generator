@@ -1,4 +1,4 @@
-import { BatchState } from '../types';
+import { BatchState, YouTubeSEOContent } from '../types';
 
 const STORAGE_KEYS = {
   CURRENT_BATCH: 'peta_piano_current_batch',
@@ -78,6 +78,40 @@ export class BatchManager {
     }
     this.persist();
     return { newCount: this.state.completedCount, isComplete: this.state.isComplete };
+  }
+
+
+  /**
+   * Stores the single YouTube title generated from the completed 25-track batch.
+   * This never affects the 25-track generation counter.
+   */
+  public setYouTubeTitle(title: string): BatchState {
+    this.state.youtubeTitle = title;
+    this.state.youtubeTitleGeneratedAt = Date.now();
+    this.persist();
+    return { ...this.state };
+  }
+
+  /** Stores the latest consumer-facing YouTube SEO package. */
+  public setYouTubeSEO(seo: YouTubeSEOContent): BatchState {
+    this.state.youtubeSEO = { ...seo, generatedAt: Date.now() };
+    this.state.youtubeTitle = seo.title;
+    this.state.youtubeTitleGeneratedAt = Date.now();
+    this.persist();
+    return { ...this.state };
+  }
+
+  public setYoutubeContent(content: YouTubeSEOContent): BatchState {
+    return this.setYouTubeSEO(content);
+  }
+
+  /** Updates only the thumbnail text; all other YouTube content remains unchanged. */
+  public setYouTubeThumbnailText(thumbnailText: string): BatchState {
+    this.state.youtubeSEO = this.state.youtubeSEO
+      ? { ...this.state.youtubeSEO, thumbnailText, generatedAt: Date.now() }
+      : this.state.youtubeSEO;
+    this.persist();
+    return { ...this.state };
   }
 
   /**

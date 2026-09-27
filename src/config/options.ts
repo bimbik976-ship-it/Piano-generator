@@ -25,6 +25,7 @@ export const CATEGORIES: string[] = [
   'Healing',
   'Stress Relief',
   'Anxiety Relief',
+  'Depression Relief',
   'Study',
   'Deep Focus',
   'Concentration',
@@ -43,6 +44,24 @@ export const CATEGORIES: string[] = [
   'Work',
   'Background Ambience',
 ];
+
+/**
+ * Helper to check if a title or text context explicitly refers to Depression Relief.
+ * Rule: Only true if explicitly contains Depression, Depressive, Depression Relief,
+ * Emotional Recovery, or Emotional Healing.
+ * NEVER maps solely because music is sad, melancholic, nostalgic, or emotional (which are Moods).
+ */
+export function isDepressionReliefContext(input: string): boolean {
+  if (!input) return false;
+  const lower = input.toLowerCase();
+  return (
+    /\bdepression\b/i.test(lower) ||
+    /\bdepressive\b/i.test(lower) ||
+    /\bdepression\s+relief\b/i.test(lower) ||
+    /\bemotional\s+recovery\b/i.test(lower) ||
+    /\bemotional\s+healing\b/i.test(lower)
+  );
+}
 
 export const GENRES: string[] = [
   'Ambient Piano',

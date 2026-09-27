@@ -140,14 +140,14 @@ export async function runQualityControlTests(): Promise<QCTestResult[]> {
     results.push({ id: 'TEST 9', title: 'Invalid JSON check', status: 'failed', details: err.message });
   }
 
-  // TEST 10: Duplicate prompt -> regenerate
+  // TEST 10: Duplicate Detector V2 -> Musical DNA only & Non-blocking
   try {
-    const sampleTrack: GeneratedTrackResult = {
-      id: 'sample_1',
-      batchNumber: 1,
-      stylePrompt: 'intimate felt piano arpeggio rubato reverb hall warmth',
-      bpm: 60,
-      key: 'C Major',
+    const track23: GeneratedTrackResult = {
+      id: 'sample_23',
+      batchNumber: 23,
+      stylePrompt: 'intimate felt piano with open tenth voicings and subtle dorian movement',
+      bpm: 42,
+      key: 'B Major',
       instruments: ['felt piano', 'ambient pad'],
       metadata: { pianoType: 'Felt Piano', category: 'Sleep', genre: 'Ambient', mood: 'Calm', country: 'US' },
       styleIntensity: { ambient: 90, minimalist: 90, meditative: 90, sleepFriendly: 90, emotional: 60, cinematic: 20, musicalActivity: 20 },
@@ -156,23 +156,38 @@ export async function runQualityControlTests(): Promise<QCTestResult[]> {
       timestamp: Date.now(),
       attemptsCount: 1,
     };
-    const duplicateCandidate = {
-      stylePrompt: 'intimate felt piano arpeggio rubato reverb hall warmth subtle sustain',
-      bpm: 60,
-      key: 'C Major',
+
+    // Candidate with identical BPM, identical Key, and similar Intensity but different prompt -> MUST BE ACCEPTED (isUnique: true)
+    const newCandidate = {
+      stylePrompt: 'gentle acoustic piano with ascending modal phrase and suspended second cadence',
+      bpm: 42, // same BPM
+      key: 'B Major', // same Key
       instruments: ['felt piano', 'ambient pad'],
       styleIntensity: { ambient: 90, minimalist: 90, meditative: 90, sleepFriendly: 90, emotional: 60, cinematic: 20, musicalActivity: 20 },
     };
-    const uniqueness = checkMusicalUniqueness(duplicateCandidate, [sampleTrack]);
-    const pass = !uniqueness.isUnique && uniqueness.duplicateTrackNumber === 1;
+    const metadataCheck = checkMusicalUniqueness(newCandidate, [track23]);
+    const metadataPassed = metadataCheck.isUnique === true;
+
+    // Verbatim identical candidate -> advisory only, strictly non-blocking
+    const identicalCandidate = {
+      stylePrompt: 'intimate felt piano with open tenth voicings and subtle dorian movement in continuous decay',
+      bpm: 42,
+      key: 'B Major',
+      instruments: ['felt piano', 'ambient pad'],
+      styleIntensity: { ambient: 90, minimalist: 90, meditative: 90, sleepFriendly: 90, emotional: 60, cinematic: 20, musicalActivity: 20 },
+    };
+    const advisoryCheck = checkMusicalUniqueness(identicalCandidate, [track23]);
+    const nonBlockingPassed = advisoryCheck.isBlocking === false && advisoryCheck.status === 'ACCEPTED';
+
+    const pass = metadataPassed && nonBlockingPassed;
     results.push({
       id: 'TEST 10',
-      title: 'Duplicate prompt -> regenerate trigger',
+      title: 'Duplicate Detector V2 (Ultra-Lenient / Musical-DNA-Only / Non-blocking)',
       status: pass ? 'passed' : 'failed',
-      details: `Duplicate detected: ${!uniqueness.isUnique} (Reason: ${uniqueness.reason})`,
+      details: `Metadata false-positive avoided (same BPM 42 & Key B Major): ${metadataPassed}. Advisory strictly non-blocking: ${nonBlockingPassed}. Decision: "${advisoryCheck.decision}"`,
     });
   } catch (err: any) {
-    results.push({ id: 'TEST 10', title: 'Duplicate check', status: 'failed', details: err.message });
+    results.push({ id: 'TEST 10', title: 'Duplicate Detector V2 check', status: 'failed', details: err.message });
   }
 
   // TEST 11: Successful generation -> save + increment
@@ -375,6 +390,26 @@ export async function runQualityControlTests(): Promise<QCTestResult[]> {
     });
   } catch (err: any) {
     results.push({ id: 'TEST F', title: 'KIE Single-Read Guarantee', status: 'failed', details: err.message });
+  }
+
+  // TEST G: Category System - Depression Relief & Medical Safety Verification
+  try {
+    const { CATEGORIES, isDepressionReliefContext } = await import('../config/options');
+    const anxietyIdx = CATEGORIES.indexOf('Anxiety Relief');
+    const depressionIdx = CATEGORIES.indexOf('Depression Relief');
+    const positionPass = anxietyIdx !== -1 && depressionIdx === anxietyIdx + 1;
+    const titleExplicitPass = isDepressionReliefContext('Piano for Emotional Recovery and Depression Relief');
+    const titleMoodSafePass = !isDepressionReliefContext('Melancholic Sad Reflective Emotional Piano');
+    const allPass = positionPass && titleExplicitPass && titleMoodSafePass;
+
+    results.push({
+      id: 'TEST G',
+      title: 'Category System: Depression Relief & Medical Safety Verification',
+      status: allPass ? 'passed' : 'failed',
+      details: `Position after Anxiety Relief: ${positionPass}, Title context detection: ${titleExplicitPass}, Mood vs Category separation: ${titleMoodSafePass}.`,
+    });
+  } catch (err: any) {
+    results.push({ id: 'TEST G', title: 'Category Depression Relief Test', status: 'failed', details: err.message });
   }
 
   return results;

@@ -60,6 +60,7 @@ export type ErrorType =
   | 'INVALID_JSON'
   | 'INVALID_STRUCTURE'
   | 'DUPLICATE'
+  | 'ADVISORY'
   | 'UNKNOWN_ERROR';
 
 export interface SafeDebugInfo {
@@ -72,6 +73,15 @@ export interface SafeDebugInfo {
   time: string;
   attempt?: number;
   sanitizedResponseBody?: string;
+  status?: 'ACCEPTED' | 'REJECTED';
+  isBlocking?: boolean;
+  sharedMetadata?: {
+    bpm?: number;
+    key?: string;
+    styleProfile?: string;
+  };
+  musicalDna?: string;
+  decision?: string;
 }
 
 export type ApiKeyStatus =
@@ -127,6 +137,17 @@ export interface GeneratorSettings {
   country: string;
 }
 
+export interface YouTubeSEOContent {
+  title: string;
+  thumbnailText: string;
+  description: string;
+  hashtags: string[];
+  tags: string[];
+  generatedAt?: number;
+}
+
+export type YoutubeContent = YouTubeSEOContent;
+
 export interface BatchState {
   currentBatchId: string;
   batchNumber: number; // 1, 2, ...
@@ -134,6 +155,9 @@ export interface BatchState {
   isComplete: boolean;
   createdAt: number;
   completedAt?: number;
+  youtubeTitle?: string;
+  youtubeTitleGeneratedAt?: number;
+  youtubeSEO?: YouTubeSEOContent;
 }
 
 export interface QCTestResult {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
+import { AlertTriangle, Info, ChevronDown, ChevronUp, Copy, Check, ShieldCheck } from 'lucide-react';
 import { SafeDebugInfo } from '../types';
 
 interface SafeDebugCardProps {
@@ -11,7 +11,27 @@ export const SafeDebugCard: React.FC<SafeDebugCardProps> = ({ debugInfo, onRetry
   const [expanded, setExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  const debugText = `
+  const isAdvisory = debugInfo.errorType === 'ADVISORY' || debugInfo.isBlocking === false;
+
+  const debugText = isAdvisory
+    ? `
+Safe Diagnostic Log (ADVISORY)
+Status: ACCEPTED
+Similarity: Informational only
+Decision: ${debugInfo.decision || 'NON-BLOCKING'}
+Message: ${debugInfo.errorMessage}
+${
+  debugInfo.sharedMetadata
+    ? `Shared metadata:
+BPM: ${debugInfo.sharedMetadata.bpm ?? 'N/A'}
+Key: ${debugInfo.sharedMetadata.key ?? 'N/A'}
+Style profile: ${debugInfo.sharedMetadata.styleProfile || 'similar'}\n`
+    : ''
+}Musical DNA: ${debugInfo.musicalDna || 'Not proven identical.'}
+Model: ${debugInfo.selectedModel} (${debugInfo.gatewayModelId})
+Time: ${debugInfo.time}
+`.trim()
+    : `
 ${debugInfo.endpoint ? `Endpoint: ${debugInfo.endpoint}\n` : ''}Model: ${debugInfo.selectedModel}
 Model ID: ${debugInfo.gatewayModelId}
 HTTP: ${debugInfo.httpStatus ?? 'N/A'}
@@ -26,6 +46,92 @@ Attempt: ${debugInfo.attempt ?? 1}${debugInfo.sanitizedResponseBody ? `\nServer 
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (isAdvisory) {
+    return (
+      <div className="rounded-xl border border-sky-500/30 bg-sky-950/20 p-4 text-slate-200">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 text-sky-400">
+            <Info className="w-5 h-5 flex-shrink-0" />
+            <span className="font-bold text-sm">Safe Diagnostic Log (ADVISORY)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleCopy}
+              className="p-1 rounded bg-[#1f2430] hover:bg-[#2b3140] text-slate-300 text-xs flex items-center gap-1 px-2 transition"
+            >
+              {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              <span className="text-[10px]">{copied ? 'Copied' : 'Copy Log'}</span>
+            </button>
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="p-1 rounded bg-[#1f2430] hover:bg-[#2b3140] text-slate-300 text-xs"
+            >
+              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        <p className="text-xs text-sky-200/90 mb-3">{debugInfo.errorMessage}</p>
+
+        {expanded && (
+          <div className="rounded-lg bg-[#0d0f14] border border-[#222736] p-3 font-mono text-[11px] space-y-2">
+            <div className="flex justify-between">
+              <span className="text-slate-500">Status:</span>
+              <span className="text-emerald-400 font-bold">ACCEPTED</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Similarity:</span>
+              <span className="text-slate-300">Informational only</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Decision:</span>
+              <span className="text-sky-300 font-bold">NON-BLOCKING</span>
+            </div>
+
+            {debugInfo.sharedMetadata && (
+              <div className="pt-2 border-t border-[#1d2230] space-y-1">
+                <div className="text-[10px] uppercase font-bold text-amber-400">Shared metadata:</div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-400">BPM:</span>
+                  <span className="text-slate-200">{debugInfo.sharedMetadata.bpm ?? 'N/A'}</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-400">Key:</span>
+                  <span className="text-slate-200">{debugInfo.sharedMetadata.key ?? 'N/A'}</span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-400">Style profile:</span>
+                  <span className="text-slate-200">{debugInfo.sharedMetadata.styleProfile || 'similar'}</span>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2 border-t border-[#1d2230] space-y-1">
+              <div className="text-[10px] uppercase font-bold text-amber-400">Musical DNA:</div>
+              <div className="text-[10px] text-slate-300">{debugInfo.musicalDna || 'Not proven identical.'}</div>
+            </div>
+
+            <div className="pt-2 border-t border-[#1d2230] flex justify-between text-[10px]">
+              <span className="text-slate-500">Model:</span>
+              <span className="text-slate-300">
+                {debugInfo.selectedModel} ({debugInfo.gatewayModelId})
+              </span>
+            </div>
+            <div className="flex justify-between text-[10px]">
+              <span className="text-slate-500">Time:</span>
+              <span className="text-slate-300">{debugInfo.time}</span>
+            </div>
+
+            <div className="pt-2 border-t border-[#1d2230] text-[10px] text-emerald-400/80 flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Prompt diterima & disimpan. Deteksi kesamaan tidak memblokir batch (Non-blocking).</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-4 text-slate-200">

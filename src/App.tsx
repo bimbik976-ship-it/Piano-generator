@@ -10,6 +10,7 @@ import { QCModal } from './components/QCModal';
 import {
   ApiKeyItem,
   BatchState,
+  YouTubeSEOContent,
   GatewayModelId,
   GeneratedTrackResult,
   GeneratorSettings,
@@ -21,7 +22,7 @@ import { DEFAULT_MODEL_ID } from './config/models';
 import { ApiKeyManager } from './services/apiKeyManager';
 import { BatchManager } from './services/batchManager';
 import { TracklistStore } from './services/tracklistStore';
-import { executeGeneration } from './services/kieClient';
+import { executeGeneration, generateYouTubeTitle, generateYouTubeSEO, generateYouTubeThumbnailText } from './services/kieClient';
 import { fetchKieCredit } from './services/creditChecker';
 import { useOnlineStatus } from './hooks/usePWA';
 
@@ -77,6 +78,13 @@ export default function App() {
   // Modals
   const [showNewBatchModal, setShowNewBatchModal] = useState(false);
   const [showQCModal, setShowQCModal] = useState(false);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [youtubeSEO, setYoutubeSEO] = useState<YouTubeSEOContent | null>(() => BatchManager.getInstance().getState().youtubeSEO || null);
+  const [isRegeneratingSEO, setIsRegeneratingSEO] = useState(false);
+  const [seoError, setSeoError] = useState<string | null>(null);
+  const [isRegeneratingThumbnail, setIsRegeneratingThumbnail] = useState(false);
+  const [thumbnailError, setThumbnailError] = useState<string | null>(null);
 
   // Sync settings changes to storage
   const handleUpdateSettings = (newSettings: GeneratorSettings) => {
@@ -200,6 +208,98 @@ export default function App() {
     setBatchState(newState);
     setLatestTrack(null);
     setDebugInfo(null);
+    setTitleError(null);
+    setYoutubeSEO(null);
+    setSeoError(null);
+    setThumbnailError(null);
+  };
+
+  // Step 1: after 25 Style Prompts are complete, generate ONLY the YouTube title from all #1–#25.
+  // SEO/hashtags/tags are a separate package handled by REGENERATE SEO.
+  const handleGenerateYouTubeTitle = async () => {
+    if (batchState.completedCount < 25 || !batchState.isComplete || isGeneratingTitle) return;
+    const completedBatchTracks = tracks.slice(0, 25);
+    if (completedBatchTracks.length < 25) {
+      setTitleError('25 style prompt berhasil belum tersedia di tracklist.');
+      return;
+    }
+
+    setIsGeneratingTitle(true);
+    setTitleError(null);
+    try {
+      const result = await generateYouTubeTitle(
+        completedBatchTracks,
+        selectedModelId,
+        routingMode,
+        (msg) => setStatusMessage(msg)
+      );
+      if (result.success === true) {
+        const updated = BatchManager.getInstance().setYouTubeTitle(result.title);
+        setBatchState(updated);
+        setYoutubeSEO(updated.youtubeSEO || null);
+      } else {
+        setTitleError(result.errorMessage);
+      }
+    } catch (err: any) {
+      setTitleError(err?.message || 'Gagal membuat judul YouTube.');
+    } finally {
+      setIsGeneratingTitle(false);
+      setStatusMessage('VALIDATING MUSICAL OUTPUT...');
+    }
+  };
+
+  const handleRegenerateSEO = async () => {
+    if (batchState.completedCount < 25 || !batchState.isComplete || isRegeneratingSEO) return;
+    const completedBatchTracks = tracks.slice(0, 25);
+    if (completedBatchTracks.length < 25) {
+      setSeoError('25 style prompt berhasil belum tersedia di tracklist.');
+      return;
+    }
+    setIsRegeneratingSEO(true);
+    setSeoError(null);
+    try {
+      const result = await generateYouTubeSEO(
+        completedBatchTracks,
+        selectedModelId,
+        routingMode,
+        youtubeSEO?.title || batchState.youtubeTitle || '',
+        (msg) => setStatusMessage(msg)
+      );
+      if (result.success) {
+        const fullTitle = `${result.seo.title} + Bamboo Water Sound`;
+        const updated = BatchManager.getInstance().setYouTubeSEO({ ...result.seo, title: fullTitle });
+        setBatchState(updated);
+        setYoutubeSEO(updated.youtubeSEO || null);
+      } else {
+        setSeoError(result.errorMessage);
+      }
+    } catch (err: any) {
+      setSeoError(err?.message || 'Gagal regenerate SEO.');
+    } finally {
+      setIsRegeneratingSEO(false);
+      setStatusMessage('VALIDATING MUSICAL OUTPUT...');
+    }
+  };
+
+  const handleRegenerateThumbnail = async () => {
+    if (!batchState.isComplete || !youtubeSEO?.title || isRegeneratingThumbnail) return;
+    setIsRegeneratingThumbnail(true);
+    setThumbnailError(null);
+    try {
+      const result = await generateYouTubeThumbnailText(youtubeSEO.title, selectedModelId, routingMode, (msg) => setStatusMessage(msg));
+      if (result.success) {
+        const updated = BatchManager.getInstance().setYouTubeThumbnailText(result.thumbnailText);
+        setBatchState(updated);
+        setYoutubeSEO(updated.youtubeSEO || null);
+      } else {
+        setThumbnailError(result.errorMessage);
+      }
+    } catch (err: any) {
+      setThumbnailError(err?.message || 'Gagal membuat Text on Thumbnail.');
+    } finally {
+      setIsRegeneratingThumbnail(false);
+      setStatusMessage('VALIDATING MUSICAL OUTPUT...');
+    }
   };
 
   // Tracklist Handlers
@@ -280,7 +380,7 @@ export default function App() {
         trackStore.addTrack(result.track);
         setTracks(trackStore.getTracks());
         setLatestTrack(result.track);
-        setDebugInfo(null);
+        setDebugInfo(result.debugInfo || null);
       } else {
         // On failure: DO NOT save, DO NOT increment counter
         setDebugInfo(result.debugInfo);
@@ -336,6 +436,17 @@ export default function App() {
             onGenerate={handleGenerate}
             onRequestNewBatch={() => setShowNewBatchModal(true)}
             onSwitchToAPI={() => setActiveTab('api')}
+            youtubeTitle={batchState.youtubeTitle || ''}
+            isGeneratingTitle={isGeneratingTitle}
+            titleError={titleError}
+            onGenerateYouTubeTitle={handleGenerateYouTubeTitle}
+            youtubeSEO={youtubeSEO}
+            isRegeneratingSEO={isRegeneratingSEO}
+            seoError={seoError}
+            onRegenerateSEO={handleRegenerateSEO}
+            isRegeneratingThumbnail={isRegeneratingThumbnail}
+            thumbnailError={thumbnailError}
+            onRegenerateThumbnail={handleRegenerateThumbnail}
           />
         )}
 

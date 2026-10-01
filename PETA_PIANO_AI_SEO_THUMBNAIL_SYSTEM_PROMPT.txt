@@ -1,7 +1,7 @@
 PETA PIANO AI — SEO + THUMBNAIL TEXT UPDATE SYSTEM PROMPT
 
 1. YOUTUBE SEO CONTENT
-- After 25 Style Prompts are successfully completed, generate one consumer-facing YouTube content package using the entire generated musical identity as internal context.
+- After 20 Style Prompts are successfully completed, generate one consumer-facing YouTube content package using the entire generated musical identity as internal context.
 - Use the centralized chat-model infrastructure already used by Style Prompt generation.
 - Output: title, thumbnailText, description, hashtags, tags.
 
@@ -20,7 +20,7 @@ PETA PIANO AI — SEO + THUMBNAIL TEXT UPDATE SYSTEM PROMPT
 - No technical metadata, track counts, AI/model information, or clickbait.
 
 4. SEO DESCRIPTION
-- 500–1,000 words; ideal target 600–800 words.
+- Minimum: 500 words; target sekitar 600–750 words; maximum 1,000 words. Quality and musical relevance over word padding.
 - Natural, human-readable, SEO optimized, and based on the actual musical identity.
 - Mention Bamboo Water Sound naturally where relevant.
 - Focus on listener experience, atmosphere, relaxation, sleep preparation, meditation, stress relief, reading, studying, quiet work, evening routines, and peaceful background listening where appropriate.
@@ -32,20 +32,26 @@ PETA PIANO AI — SEO + THUMBNAIL TEXT UPDATE SYSTEM PROMPT
 5. HASHTAGS
 - Generate 5–15 relevant hashtags, preferably 8–15 when justified.
 - Favor strong, relevant search-intent terms without claiming numerical search-volume data.
-- No duplicates.
+- Repetition across batches is acceptable and must not cause regeneration failure.
 
 6. YOUTUBE TAGS
 - Generate 15–25 relevant comma-separated tags.
-- No duplicates or irrelevant keywords.
+- Repetition across batches is acceptable and must not cause regeneration failure.
 
-7. VALIDATION
-- Description must be 500–1,000 words.
-- Hashtags must be 5–15.
-- Tags must be 15–25.
-- Thumbnail text must be shorter than the title and no more than 8 meaningful words.
-- Reject/regenerate output that exposes technical metadata, track counts, album/collection language, or fixed/example title text.
+7. VALIDATION (REGENERATE SEO V5: TITLE + DESCRIPTION PRIORITY)
+- Core Validation: Title (8–140 chars, distinct from previous title, no "+ Bamboo Water Sound") and Description (250–800 words, target 400–600, no forbidden technical/catalog metadata, no medical claims).
+- Metadata Validation: Hashtags (5–15), Tags (15–25), and Thumbnail text (2–6 words, max 8). Metadata uses fallbacks and NEVER causes regeneration failure.
+- Specific error reporting: TITLE_INVALID, TITLE_NOT_NEW, DESCRIPTION_TOO_SHORT, DESCRIPTION_TOO_LONG, DESCRIPTION_MISSING, INVALID_JSON, etc.
 
 8. REGENERATE SEO
 - The REGENERATE SEO button must send a fresh chat-model request using the same centralized KIE client, active API-key routing, response parser, validation, and safe error handling used elsewhere in the app.
-- It must not reset the batch or alter the 25 Style Prompts or tracklist.
+- It must not reset the batch or alter the 20 Style Prompts or tracklist.
 - Keep the previous SEO result if regeneration fails.
+
+9. CRITICAL PRIORITY / ANTI-GENERIC TEMPLATE
+- TITLE and SEO DESCRIPTION are the primary quality outputs and must be generated from the actual Musical DNA of Style Prompt #1–#20.
+- Do not use a fixed title formula, fixed opening, fixed paragraph sequence, or fixed closing.
+- Do not achieve variation by simple synonym swapping. Variation must come from musical identity, content angle, structure, vocabulary, and listening context.
+- REGENERATE SEO must produce a genuinely new title and genuinely new description. A one-word edit of the previous title is not sufficient.
+- Hashtag and YouTube tag repetition across batches is acceptable and must never be treated as a regeneration failure; validate only their basic format/count.
+- A valid title and valid description (minimum 500 words, target around 600–750 words, maximum 1,000 words) are the core conditions for a successful SEO regeneration.

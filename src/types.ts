@@ -30,7 +30,7 @@ export interface StyleIntensity {
 
 export interface GeneratedTrackResult {
   id: string;
-  batchNumber: number; // #1 to #25
+  batchNumber: number; // #1 to #20
   stylePrompt: string;
   bpm: number;
   key: string;
@@ -59,6 +59,13 @@ export type ErrorType =
   | 'RESPONSE_BODY_READ_ERROR'
   | 'INVALID_JSON'
   | 'INVALID_STRUCTURE'
+  | 'TITLE_INVALID'
+  | 'TITLE_NOT_NEW'
+  | 'DESCRIPTION_TOO_SHORT'
+  | 'DESCRIPTION_TOO_LONG'
+  | 'DESCRIPTION_MISSING'
+  | 'DESCRIPTION_INVALID'
+  | 'MODEL_EMPTY_RESPONSE'
   | 'DUPLICATE'
   | 'ADVISORY'
   | 'UNKNOWN_ERROR';

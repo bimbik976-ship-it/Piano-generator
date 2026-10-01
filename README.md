@@ -36,3 +36,6 @@ The title is stored in the current batch state, can be copied, and can be regene
 
 ## Vercel Production API
 The project includes Vercel Serverless Functions under `api/kie/` so production requests use `/api/kie/responses` and `/api/kie/credit` without relying on the Express `server.ts` process. The frontend never sends requests directly to KIE from the browser.
+
+
+KIE SEO JSON FIX V3: the SEO Responses request now uses strict text.format JSON Schema as the primary response contract, with structured/no-reasoning/plain/streaming fallbacks. This specifically addresses HTTP 200 responses whose model text previously failed JSON parsing.

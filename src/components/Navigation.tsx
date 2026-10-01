@@ -1,7 +1,7 @@
 import React from 'react';
-import { Music2, ListMusic, KeyRound } from 'lucide-react';
+import { Music2, ListMusic, KeyRound, Sparkles } from 'lucide-react';
 
-export type TabId = 'peta' | 'tracklist' | 'api';
+export type TabId = 'peta' | 'tracklist' | 'seo-title' | 'api';
 
 interface NavigationProps {
   activeTab: TabId;
@@ -18,18 +18,18 @@ export const Navigation: React.FC<NavigationProps> = ({
 }) => {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0d0f12]/95 backdrop-blur-lg border-t border-[#222634] px-4 py-2">
-      <div className="max-w-md mx-auto grid grid-cols-3 gap-2">
+      <div className="max-w-lg mx-auto grid grid-cols-4 gap-1.5 sm:gap-2">
         {/* Tab 1: PETA */}
         <button
           onClick={() => onTabChange('peta')}
-          className={`flex flex-col items-center justify-center py-2 px-3 rounded-xl transition-all relative ${
+          className={`flex flex-col items-center justify-center py-2 px-2 sm:px-3 rounded-xl transition-all relative ${
             activeTab === 'peta'
               ? 'text-amber-400 bg-amber-500/10 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-bold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#161922]'
           }`}
         >
           <Music2 className="w-5 h-5 mb-1" />
-          <span className="text-[11px] tracking-wider uppercase font-semibold">PETA</span>
+          <span className="text-[10px] sm:text-[11px] tracking-wider uppercase font-semibold">PETA</span>
           {activeTab === 'peta' && (
             <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-400" />
           )}
@@ -38,7 +38,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         {/* Tab 2: TRACKLIST */}
         <button
           onClick={() => onTabChange('tracklist')}
-          className={`flex flex-col items-center justify-center py-2 px-3 rounded-xl transition-all relative ${
+          className={`flex flex-col items-center justify-center py-2 px-2 sm:px-3 rounded-xl transition-all relative ${
             activeTab === 'tracklist'
               ? 'text-amber-400 bg-amber-500/10 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-bold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#161922]'
@@ -52,16 +52,33 @@ export const Navigation: React.FC<NavigationProps> = ({
               </span>
             )}
           </div>
-          <span className="text-[11px] tracking-wider uppercase font-semibold">TRACKLIST</span>
+          <span className="text-[10px] sm:text-[11px] tracking-wider uppercase font-semibold">TRACKLIST</span>
           {activeTab === 'tracklist' && (
             <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-400" />
           )}
         </button>
 
-        {/* Tab 3: API */}
+        {/* Tab 3: CREATE SEO (FROM TITLE) */}
+        <button
+          onClick={() => onTabChange('seo-title')}
+          className={`flex flex-col items-center justify-center py-2 px-2 sm:px-3 rounded-xl transition-all relative ${
+            activeTab === 'seo-title'
+              ? 'text-amber-400 bg-amber-500/10 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-bold'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#161922]'
+          }`}
+          title="Create SEO from Title"
+        >
+          <Sparkles className="w-5 h-5 mb-1" />
+          <span className="text-[10px] sm:text-[11px] tracking-wider uppercase font-semibold">CREATE SEO</span>
+          {activeTab === 'seo-title' && (
+            <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-400" />
+          )}
+        </button>
+
+        {/* Tab 4: API */}
         <button
           onClick={() => onTabChange('api')}
-          className={`flex flex-col items-center justify-center py-2 px-3 rounded-xl transition-all relative ${
+          className={`flex flex-col items-center justify-center py-2 px-2 sm:px-3 rounded-xl transition-all relative ${
             activeTab === 'api'
               ? 'text-amber-400 bg-amber-500/10 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-bold'
               : 'text-slate-400 hover:text-slate-200 hover:bg-[#161922]'
@@ -75,7 +92,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               }`}
             />
           </div>
-          <span className="text-[11px] tracking-wider uppercase font-semibold">API</span>
+          <span className="text-[10px] sm:text-[11px] tracking-wider uppercase font-semibold">API</span>
           {activeTab === 'api' && (
             <span className="absolute bottom-1 w-1 h-1 rounded-full bg-amber-400" />
           )}

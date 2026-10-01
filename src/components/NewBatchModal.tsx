@@ -24,7 +24,7 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({
         </div>
 
         <h3 className="text-lg font-bold text-center text-white mb-2">
-          Start a new 25-prompt batch?
+          Start a new 20-prompt batch?
         </h3>
 
         <p className="text-xs text-slate-300 text-center mb-4 leading-relaxed">
@@ -37,7 +37,7 @@ export const NewBatchModal: React.FC<NewBatchModalProps> = ({
         <div className="rounded-xl bg-[#0f1118] border border-[#222736] p-3 text-[11px] text-slate-400 mb-5 flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
           <span>
-            Setiap batch dirancang untuk menghasilkan 25 prompt unik berkesinambungan untuk satu album / video YouTube instrumental.
+            Setiap batch dirancang untuk menghasilkan 20 prompt unik berkesinambungan untuk satu album / video YouTube instrumental.
           </span>
         </div>
 

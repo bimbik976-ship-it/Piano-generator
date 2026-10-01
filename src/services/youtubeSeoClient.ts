@@ -1,12 +1,13 @@
 import { GatewayModelId, GeneratedTrackResult, YoutubeContent, RoutingMode, ErrorType, SafeDebugInfo } from '../types';
 import { ApiKeyManager } from './apiKeyManager';
 import { BatchManager } from './batchManager';
-import { analyze25Tracks, buildYoutubeSeoPrompt } from './youtubeSeoAnalyzer';
+import { analyzeBatchTracks, buildYoutubeSeoPrompt } from './youtubeSeoAnalyzer';
 import { validateAndSanitizeYoutubeSeo } from './youtubeSeoValidator';
 import { parseKieResponse, extractKieText } from './kieClient';
 import { parseModelJSON, INVALID_JSON } from './jsonParser';
 import { sanitizeSafeBody } from './kieConnectionTester';
 import { AUTO_FALLBACK_CHAIN } from '../config/models';
+import { BATCH_SIZE } from '../config/batch';
 
 export interface YoutubeSeoGenerateOptions {
   tracks: GeneratedTrackResult[];
@@ -25,15 +26,15 @@ export interface YoutubeSeoResult {
 }
 
 /**
- * High-craft deterministic generator built strictly from the full 25-track analysis.
+ * High-craft deterministic generator built strictly from the full 20-track analysis.
  * Used during offline testing, when no API key is set, or as fallback.
- * CRITICAL: The 25 tracks are INTERNAL ONLY and never mentioned in the description.
+ * CRITICAL: The 20 tracks are INTERNAL ONLY and never mentioned in the description.
  */
 export function generateDeterministicYoutubeSeo(
   tracks: GeneratedTrackResult[],
   seedModifier: number = 0
 ): YoutubeContent {
-  const analysis = analyze25Tracks(tracks);
+  const analysis = analyzeBatchTracks(tracks);
 
   const primaryPiano = analysis.dominantPianoTypes[0] || 'Felt Piano';
   const primaryGenre = analysis.dominantGenres[0] || 'Ambient Piano';
@@ -55,7 +56,7 @@ export function generateDeterministicYoutubeSeo(
   const baseTitle = titleTemplates[Math.abs(hash) % titleTemplates.length];
   const finalTitle = `${baseTitle} + Bamboo Water Sound`;
 
-  // Dynamic 6-paragraph SEO description strictly based on all 25 tracks (500–1,000 words, target 600–800 words)
+  // Dynamic 6-paragraph SEO description strictly based on all 20 tracks (500–1,000 words, target 600–800 words)
   // ZERO mention of technical metadata (BPM, keys, scores) or catalog language ("album", "collection", track counts)
   const paragraph1 = `Welcome to this peaceful piano soundscape, an immersive acoustic experience thoughtfully created to offer a sanctuary of stillness, emotional balance, and restorative calm. This gentle piano music unites soothing acoustic harmonies, crafted with deliberate negative space, tender phrasing, and an organic aesthetic. Rather than demanding active focus, the music unfolds as a soothing background atmosphere designed to slow the rapid pace of daily life, steady the breath, and establish a tranquil haven within your personal space. From the very first gentle chord to the final lingering resonance, this peaceful piano experience serves as a dependable refuge for anyone seeking calming music, deep mental quietude, and a comforting shelter from digital overstimulation.`;
 
@@ -136,7 +137,7 @@ export function generateDeterministicYoutubeSeo(
 
 /**
  * Primary executor for YouTube Title & SEO Generation and Regeneration.
- * Strictly active ONLY IF Batch Progress = 25/25 and all 25 prompts are stored.
+ * Strictly active ONLY IF Batch Progress = 20/20 and all 20 prompts are stored.
  * On regeneration failure, old result is KEPT intact and safe diagnostic error is returned.
  */
 export async function executeYoutubeSeoGeneration(
@@ -150,16 +151,16 @@ export async function executeYoutubeSeoGeneration(
     onStatusUpdate,
   } = options;
 
-  // RULE CHECK: Active ONLY IF 25/25 tracks exist in batch
-  if (!tracks || tracks.length < 25) {
+  // RULE CHECK: Active ONLY IF 20/20 tracks exist in batch
+  if (!tracks || tracks.length < BATCH_SIZE) {
     return {
       success: false,
       errorType: 'UNKNOWN_ERROR',
-      errorMessage: `Fitur YouTube Title & SEO hanya aktif jika BATCH PROGRESS = 25/25 (saat ini ${tracks?.length || 0}/25).`,
+      errorMessage: `Fitur YouTube Title & SEO hanya aktif jika BATCH PROGRESS = 20/20 (saat ini ${tracks?.length || 0}/20).`,
     };
   }
 
-  onStatusUpdate?.('MENGANALISIS SELURUH 25 STYLE PROMPT...');
+  onStatusUpdate?.('MENGANALISIS SELURUH 20 STYLE PROMPT...');
 
   const keyManager = ApiKeyManager.getInstance();
   const activeKeys = keyManager.getActiveKeys();
@@ -210,7 +211,8 @@ export async function executeYoutubeSeoGeneration(
       ? Array.from(new Set([selectedModelId, 'gpt-6-astra', 'gpt-5-6-luna', 'gpt-5-5']))
       : [selectedModelId];
 
-  const analysis = analyze25Tracks(tracks);
+  const analysis = analyzeBatchTracks(tracks);
+  const previousYoutubeContent = BatchManager.getInstance().getState().youtubeSEO;
 
   let lastErrorType: ErrorType = 'UNKNOWN_ERROR';
   let lastErrorMessage = '';
@@ -229,10 +231,13 @@ export async function executeYoutubeSeoGeneration(
             : `MEMBUAT YOUTUBE TITLE & SEO VIA ${model.toUpperCase()}...`
       );
 
-      const basePrompt = buildYoutubeSeoPrompt(tracks);
+      const basePrompt = buildYoutubeSeoPrompt(tracks, {
+        isRegeneration,
+        previousTitle: previousYoutubeContent?.title || BatchManager.getInstance().getState().youtubeTitle || '',
+      });
       const promptText =
         attempt > 1
-          ? `${basePrompt}\n\nRETRY INSTRUCTION: Output sebelumnya tidak valid atau mengandung metadata teknis/katalog terlarang. Kembalikan HANYA single JSON object tanpa markdown, tanpa code fences (\`\`\`json), dan tanpa teks pengantar. Deskripsi harus 100% CONSUMER-FACING untuk penonton SATU video YouTube (500-1000 kata): DILARANG menyebut BPM, angka tempo, nada dasar/key, Style Intensity, track count/number (25-track), dan DILARANG memakai kata 'album' atau 'collection'.`
+          ? `${basePrompt}\n\nRETRY INSTRUCTION: Perbaiki output sebelumnya. Prioritas validasi adalah TITLE dan SEO DESCRIPTION. Kembalikan HANYA satu JSON object valid tanpa markdown/code fence. TITLE harus baru dan tanpa Bamboo Water Sound. DESCRIPTION harus baru, consumer-facing, 500–1000 kata, tanpa BPM/key/technical metadata/20-track/Style Prompt/album/collection/medical claims. Hashtag dan tags cukup valid secara format dan tidak perlu berbeda dari batch sebelumnya. ThumbnailText harus singkat dan berasal dari title baru.`
           : basePrompt;
 
       const payload = {
@@ -333,7 +338,7 @@ export async function executeYoutubeSeoGeneration(
           avgBpm: analysis.bpmRange.avg,
         });
 
-        if (validation.sanitizedContent) {
+        if (validation.isValid && validation.sanitizedContent) {
           // Success: persist to active batch
           BatchManager.getInstance().setYoutubeContent(validation.sanitizedContent);
           return {

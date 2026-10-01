@@ -128,7 +128,7 @@ const handleCodexGeneration = async (req: express.Request, res: express.Response
     });
   }
 
-  const { model, input } = req.body || {};
+  const { model, input, reasoning, stream } = req.body || {};
 
   // Strict Model Validation
   if (!model || !ALLOWED_MODELS.has(model)) {
@@ -140,32 +140,57 @@ const handleCodexGeneration = async (req: express.Request, res: express.Response
     });
   }
 
-  // Strictly minimal payload without reasoning, tools, or unnecessary fields
-  const payload = {
+  // Preserve the official KIE Responses API reasoning control when supplied.
+  // Do not silently strip model parameters that are part of the documented request.
+  const payload: Record<string, any> = {
     model,
-    stream: false,
+    stream: stream === true,
     input: Array.isArray(input) ? input : [],
   };
+  if (reasoning && typeof reasoning === 'object') {
+    const effort = reasoning.effort;
+    if (typeof effort === 'string' && ['low', 'medium', 'high', 'xhigh'].includes(effort)) {
+      payload.reasoning = { effort };
+    }
+  }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90000);
+    let upstreamRes: Response | null = null;
+    let lastNetworkError: any = null;
 
-    let upstreamRes: Response;
-    try {
-      upstreamRes = await fetch('https://api.kie.ai/codex/v1/responses', {
-        method: 'POST',
-        // Match the official KIE request as closely as possible.
-        // Do not add proxy-specific Accept/Cache-Control/User-Agent headers.
-        headers: {
-          'Authorization': `Bearer ${key}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
+    // Retry only transient upstream gateway failures. The browser/client layer
+    // still performs model fallback after this proxy-level recovery.
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000);
+      try {
+        upstreamRes = await fetch('https://api.kie.ai/codex/v1/responses', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+      } catch (err: any) {
+        lastNetworkError = err;
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      if (upstreamRes && ![500, 502, 503, 504].includes(upstreamRes.status)) break;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1200 * attempt));
+    }
+
+    if (!upstreamRes) {
+      const err: any = lastNetworkError;
+      const isAbort = err?.name === 'AbortError';
+      return res.status(isAbort ? 504 : 502).json({
+        errorType: isAbort ? 'GATEWAY_TIMEOUT' : 'NETWORK_ERROR',
+        httpStatus: isAbort ? 504 : 502,
+        message: isAbort ? 'KIE Gateway timeout.' : `Network failure: ${err?.message || 'unknown error'}`
       });
-    } finally {
-      clearTimeout(timeout);
     }
 
     const status = upstreamRes.status;

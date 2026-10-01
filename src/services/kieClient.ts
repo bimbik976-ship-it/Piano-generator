@@ -13,6 +13,15 @@ import { validateOutput } from './validator';
 import { checkMusicalUniqueness, SUBSTANTIAL_DIFFERENCE_INSTRUCTION } from './similarityEngine';
 import { ApiKeyManager } from './apiKeyManager';
 import { sanitizeSafeBody } from './kieConnectionTester';
+import { BATCH_SIZE } from '../config/batch';
+import {
+  validateAndSanitizeYoutubeSeo,
+  cleanCoreTitle,
+  isTitleMeaningfullyDifferent,
+  containsForbiddenSeoContent,
+  sanitizeConsumerFacingDescription
+} from './youtubeSeoValidator';
+import { buildYoutubeSeoPrompt } from './youtubeSeoAnalyzer';
 
 export { extractKieText };
 
@@ -150,7 +159,7 @@ You MUST generate a musically distinct, fresh piano concept with a different key
 
   const baseInstructions = `
 You are the AI engine for PETA PIANO AI, a professional music intelligence system that engineers high-performing SUNO STYLE PROMPTS strictly for INSTRUMENTAL PIANO music.
-Target output is ONE single instrumental piano style prompt and associated musical parameters for Track #${batchNumber} of a 25-track instrumental album/batch.
+Target output is ONE single instrumental piano style prompt and associated musical parameters for Track #${batchNumber} of a 20-track instrumental batch.
 
 CRITICAL CONSTRAINTS:
 - STRICTLY INSTRUMENTAL. NEVER include lyrics, vocal references, lead vocalists, backing vocals, or lyrical song structures (no "verse 1", no "chorus").
@@ -324,6 +333,7 @@ Model ID: ${candidateModelId}`);
             ],
           },
         ],
+        reasoning: { effort: 'high' },
       };
 
       // 2. Fresh AbortController with 60s timeout for this single request attempt
@@ -484,19 +494,24 @@ Model ID: ${candidateModelId}`);
           attempt,
         };
 
-        // HTTP 500: Server/Gateway failure
-        // - DO NOT call the same request repeatedly
-        // - DO NOT count it as a successful generation
-        // - DO NOT increment the batch counter
-        // - DO NOT save the failed prompt
-        // - DO NOT rotate API key automatically
-        // - DO NOT mark API key exhausted or invalid
-        // - Display the sanitized server response and allow manual Retry
-        if (effectiveCode >= 500) {
+        // Transient gateway/server failures: retry this model, then let AUTO
+        // routing continue to the next model. Never save a failed generation.
+        if ([500, 502, 503, 504].includes(effectiveCode)) {
+          if (attempt < MAX_ATTEMPTS) {
+            const backoffMs = 1000 * attempt;
+            onStatusUpdate(`KIE Gateway HTTP ${effectiveCode} — retry ${attempt + 1}/${MAX_ATTEMPTS}...`);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+            attempt += 1;
+            continue;
+          }
+          if (routingMode === 'AUTO' && modelIdx < modelsToTry.length - 1) {
+            onStatusUpdate(`Model ${candidateModelName} gagal (${effectiveCode}). Beralih ke model berikutnya...`);
+            break;
+          }
           return {
             success: false,
             errorType: 'GATEWAY_ERROR',
-            errorMessage: `KIE Gateway mengalami gangguan server (HTTP ${effectiveCode}). Silakan klik "Coba Lagi (Retry)" untuk mengirim request baru.`,
+            errorMessage: `KIE Gateway mengalami gangguan server (HTTP ${effectiveCode}).`,
             debugInfo: lastDebugInfo,
           };
         }
@@ -773,7 +788,7 @@ export type YouTubeSEOGenerationResponse = YouTubeSEOResponse | YouTubeSEOErrorR
 function buildSEOContext(tracks: GeneratedTrackResult[]): string {
   return [...tracks]
     .sort((a, b) => a.batchNumber - b.batchNumber)
-    .slice(0, 25)
+    .slice(0, BATCH_SIZE)
     .map((t) => {
       const excerpt = String(t.stylePrompt || '').replace(/\s+/g, ' ').trim().slice(0, 700);
       return [
@@ -787,145 +802,351 @@ function buildSEOContext(tracks: GeneratedTrackResult[]): string {
 }
 
 export function buildYouTubeSEOContentPrompt(tracks: GeneratedTrackResult[], currentTitle?: string): string {
-  const context = buildSEOContext(tracks);
-  return `You are the YouTube SEO content strategist for PETA PIANO AI.
-
-Analyze ALL 25 completed Style Prompts (#1 through #25) as one complete dataset. Every deliverable in this YouTube Content package must be grounded in the combined musical identity of all 25 prompts, not only the last prompt. The data is INTERNAL ANALYSIS CONTEXT only.
-
-Generate ONE consumer-facing YouTube content package.
-
-CRITICAL OUTPUT RULES:
-- Return ONLY one valid JSON object.
-- No markdown.
-- No code fences.
-- No explanation before or after JSON.
-- Do not mention AI, Suno, GPT, models, prompts, generation, metadata, or analysis.
-
-TITLE:
-- Create one natural, searchable English YouTube title.
-- Analyze the complete identity across Style Prompt #1–#25 before choosing the title.
-- Reflect the dominant musical identity and strongest listening purposes.
-- Keep the core title concise and human-readable.
-- Do NOT include the suffix "+ Bamboo Water Sound" because the application adds it automatically.
-
-THUMBNAIL TEXT:
-- Create a SHORT text extracted dynamically from the generated title.
-- It must NOT copy the full title.
-- Maximum 6-8 meaningful words total.
-- Prefer 2-6 words per line.
-- Use the strongest words from the actual generated title.
-- Do not hardcode a fixed phrase.
-- Do not use technical metadata or track counts.
-- \\n separates thumbnail lines.
-
-SEO DESCRIPTION:
-- Write 500-1,000 words.
-- Ideal target: 600-800 words.
-- Natural, useful, human-readable YouTube description.
-- Focus on listening experience, atmosphere, piano character, relaxation, sleep preparation, meditation, stress relief, reading, studying, quiet work, evening routines, and peaceful background listening where relevant.
-- Mention Bamboo Water Sound naturally.
-- Use internal musical data to improve accuracy, but NEVER expose technical analysis.
-- NEVER mention BPM, tempo numbers, BPM ranges, average BPM, musical key, key signature, note density scores, intensity scores, or other technical metadata.
-- NEVER use the words "album", "instrumental album", "collection", "track collection", "across the collection", "each composition", or "each track".
-- NEVER mention any track count, including 25 tracks, 25-track, 25 songs, 25 pieces, or 25 Style Prompts.
-- Do not describe the structure or process used to generate the music.
-- Do not make medical, therapeutic, or guaranteed health claims (e.g. NEVER claim music cures, treats, or clinically heals depression or replaces therapy; use safe terms like emotional comfort, peaceful solace, and supportive relaxation).
-- Avoid keyword stuffing.
-
-FORBIDDEN DESCRIPTION CONCEPTS:
-BPM, tempo numbers, average pace, musical key, technical metadata, Style Intensity, track number, track count, Style Prompt numbers, AI generation process, album, collection, 25 tracks, 25-track, 25 songs, 25 pieces, 25 compositions.
-
-HASHTAGS:
-- Generate 5-15 relevant hashtags.
-- Base the selection on the combined musical identity of Style Prompt #1–#25.
-- Prefer strong, high-search-intent music/relaxation/sleep/meditation/piano/water-sound terms when relevant.
-- No duplicates.
-- Do not claim actual search-volume numbers.
-
-YOUTUBE TAGS:
-- Generate 15-25 relevant comma-separated tags.
-- Base the tags on the combined musical identity of Style Prompt #1–#25.
-- No duplicates.
-- Use natural search phrases relevant to the actual musical identity.
-
-JSON SCHEMA:
-{
-  "title": "core YouTube title without the Bamboo Water Sound suffix",
-  "thumbnailText": "short text\\noptional second line",
-  "description": "500-1000 word consumer-facing YouTube description",
-  "hashtags": ["#example"],
-  "tags": ["example search phrase"]
+  return buildYoutubeSeoPrompt(tracks, {
+    isRegeneration: Boolean(currentTitle),
+    previousTitle: currentTitle
+  });
 }
 
-CURRENT TITLE (optional regeneration context):
-${currentTitle || '(none)'}
-
-INTERNAL MUSICAL ANALYSIS DATA:
-${context}`;
+export interface SeoDetailedValidationResult {
+  seo: YouTubeSEOContent | null;
+  errorType: ErrorType;
+  error: string;
+  failedPart: 'TITLE' | 'DESCRIPTION' | 'JSON' | null;
 }
 
-function cleanCoreTitle(rawTitle: string): string {
-  return rawTitle
-    .replace(/\s*\+\s*bamboo\s+water\s+sound\s*$/i, '')
-    .replace(/["“”]/g, '')
-    .trim();
-}
+export function validateSEOContentDetailed(data: any, currentTitle?: string): SeoDetailedValidationResult {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return {
+      seo: null,
+      errorType: 'INVALID_JSON',
+      error: 'Output bukan JSON object yang valid.',
+      failedPart: 'JSON',
+    };
+  }
 
-function validateSEOContent(data: any): YouTubeSEOContent | null {
-  if (!data || typeof data !== 'object') return null;
-  const title = cleanCoreTitle(typeof data.title === 'string' ? data.title : '');
-  const thumbnailText = typeof data.thumbnailText === 'string' ? data.thumbnailText.trim() : '';
-  const description = typeof data.description === 'string' ? data.description.trim() : '';
-  const hashtags = Array.isArray(data.hashtags) ? data.hashtags.filter((x: any) => typeof x === 'string').map((x: string) => x.trim()).filter(Boolean) : [];
-  const tags = Array.isArray(data.tags) ? data.tags.filter((x: any) => typeof x === 'string').map((x: string) => x.trim()).filter(Boolean) : [];
+  // 1. CORE VALIDATION: TITLE
+  const rawTitle = typeof data.title === 'string' ? data.title : '';
+  const title = cleanCoreTitle(rawTitle);
 
-  const words = description.split(/\s+/).filter(Boolean).length;
-  const forbidden = /\b\d+(?:\s*[-–]?\s*)?(?:BPM|beats per minute)\b|\b(?:BPM|tempo)\s*(?:range|average)\b|\b(?:key signature|musical key|style intensity|ambient score|minimalist score|meditative score|sleep-friendly score|emotional score|cinematic score|musical activity score)\b|\b(?:album|instrumental album|collection|music collection|track collection|across the collection|each composition|each track|these tracks|25\s*-?\s*track(?:s)?|25\s+songs|25\s+pieces|25\s+compositions|25\s+style\s+prompts?)\b/i;
-  if (!title || !thumbnailText || words < 500 || words > 1000) return null;
-  if (forbidden.test(description)) return null;
-  if (hashtags.length < 5 || hashtags.length > 15) return null;
-  if (tags.length < 15 || tags.length > 25) return null;
+  if (!title) {
+    return {
+      seo: null,
+      errorType: 'TITLE_INVALID',
+      error: 'TITLE kosong atau tidak valid.',
+      failedPart: 'TITLE',
+    };
+  }
+  if (title.length < 8 || title.length > 140) {
+    return {
+      seo: null,
+      errorType: 'TITLE_INVALID',
+      error: `TITLE harus 8–140 karakter (saat ini ${title.length} karakter).`,
+      failedPart: 'TITLE',
+    };
+  }
+  if (currentTitle && !isTitleMeaningfullyDifferent(title, currentTitle)) {
+    return {
+      seo: null,
+      errorType: 'TITLE_NOT_NEW',
+      error: `TITLE baru harus berbeda dari title sebelumnya. Tidak boleh sekadar mengulang atau menukar sinonim sederhana dari "${cleanCoreTitle(currentTitle)}".`,
+      failedPart: 'TITLE',
+    };
+  }
+
+  // 2. CORE VALIDATION: DESCRIPTION
+  let description = typeof data.description === 'string' ? data.description.trim() : '';
+  if (!description) {
+    return {
+      seo: null,
+      errorType: 'DESCRIPTION_MISSING',
+      error: 'DESCRIPTION kosong atau tidak ditemukan.',
+      failedPart: 'DESCRIPTION',
+    };
+  }
+
+  description = sanitizeConsumerFacingDescription(description);
+
+  if (containsForbiddenSeoContent(description)) {
+    return {
+      seo: null,
+      errorType: 'DESCRIPTION_INVALID',
+      error: 'DESCRIPTION mengandung metadata teknis atau istilah katalog terlarang (BPM, tempo, key, track count, Style Prompt, album, collection).',
+      failedPart: 'DESCRIPTION',
+    };
+  }
+
+  // Neutralize medical claims
+  const medicalClaims = /\b(cures?|treating|treats)\s+(depression|anxiety|insomnia)\b|\bmedical(ly)?\s+proven\b|\bclinically\s+proven\b/i;
+  if (medicalClaims.test(description)) {
+    description = description.replace(medicalClaims, 'supports peaceful calm and deep relaxation');
+  }
+
+  // Ensure Bamboo Water Sound natural mention
+  if (!/bamboo\s+water\s+sound/i.test(description)) {
+    description += '\n\nThroughout this soundscape, the gentle piano notes are naturally interwoven with authentic Bamboo Water Sounds for relaxing, continuous background listening.';
+  }
+
+  let words = description.split(/\s+/).filter(Boolean);
+
+  // If words > 1000 but close (<= 1050), truncate cleanly at sentence boundary
+  if (words.length > 1000 && words.length <= 1050) {
+    const truncatedText = words.slice(0, 980).join(' ');
+    const lastSentenceEnd = Math.max(
+      truncatedText.lastIndexOf('.'),
+      truncatedText.lastIndexOf('!'),
+      truncatedText.lastIndexOf('?')
+    );
+    if (lastSentenceEnd > 200) {
+      description = truncatedText.slice(0, lastSentenceEnd + 1);
+    }
+    words = description.split(/\s+/).filter(Boolean);
+  }
+
+  if (words.length < 500) {
+    return {
+      seo: null,
+      errorType: 'DESCRIPTION_TOO_SHORT',
+      error: `DESCRIPTION terlalu pendek (${words.length} kata, minimum 500 kata, target sekitar 600–750 kata).`,
+      failedPart: 'DESCRIPTION',
+    };
+  }
+  if (words.length > 1000) {
+    return {
+      seo: null,
+      errorType: 'DESCRIPTION_TOO_LONG',
+      error: `DESCRIPTION melebihi 1000 kata (${words.length} kata, maksimum 1000 kata).`,
+      failedPart: 'DESCRIPTION',
+    };
+  }
+
+  // 3. METADATA NORMALIZATION (LENIENT - NEVER BLOCKS OR FAILS)
+  // Thumbnail Text (max 6–8 meaningful words derived from title)
+  let thumbnailText = typeof data.thumbnailText === 'string'
+    ? data.thumbnailText.trim()
+    : (typeof data.thumbnail_text === 'string' ? data.thumbnail_text.trim() : '');
   const thumbWords = thumbnailText.replace(/\n/g, ' ').split(/\s+/).filter(Boolean);
-  if (thumbWords.length > 8) return null;
-  if (thumbnailText.toLowerCase() === title.toLowerCase()) return null;
-  const uniqueHash = new Set(hashtags.map(x => x.toLowerCase()));
-  const uniqueTags = new Set(tags.map(x => x.toLowerCase()));
-  if (uniqueHash.size !== hashtags.length || uniqueTags.size !== tags.length) return null;
-  return { title, thumbnailText, description, hashtags, tags };
+  if (!thumbnailText || thumbWords.length > 8 || thumbnailText.toLowerCase() === title.toLowerCase()) {
+    const titleWords = title.replace(/[^A-Za-z0-9&'\- ]/g, ' ').split(/\s+/).filter(Boolean);
+    const stopWords = new Set(['for', 'and', 'the', 'with', 'of', 'to', 'a', 'an', 'in', 'on', 'music', '&']);
+    const selected = titleWords.filter((w) => !stopWords.has(w.toLowerCase())).slice(0, 6);
+    thumbnailText = selected.length >= 2
+      ? (selected.length > 3 ? `${selected.slice(0, 3).join(' ')}\n${selected.slice(3).join(' ')}` : selected.join(' '))
+      : titleWords.slice(0, 4).join(' ');
+  }
+
+  // Hashtags (5–15, repetition allowed, fallback if needed)
+  let rawHashtags = Array.isArray(data.hashtags) ? data.hashtags : [];
+  let hashtags: string[] = [];
+  const seenHashtags = new Set<string>();
+  for (const h of rawHashtags) {
+    if (typeof h !== 'string') continue;
+    let clean = h.trim();
+    if (!clean.startsWith('#')) {
+      clean = '#' + clean.replace(/\s+/g, '');
+    } else {
+      clean = '#' + clean.slice(1).replace(/\s+/g, '');
+    }
+    const lower = clean.toLowerCase();
+    if (!seenHashtags.has(lower) && clean.length > 1) {
+      seenHashtags.add(lower);
+      hashtags.push(clean);
+    }
+  }
+  const defaultHashtags = [
+    '#BambooWaterSound', '#RelaxingMusic', '#PianoMusic', '#SleepMusic',
+    '#MeditationMusic', '#PeacefulPiano', '#AmbientPiano', '#SleepPiano',
+    '#StressRelief', '#CalmingMusic', '#DeepSleep', '#BackgroundMusic'
+  ];
+  for (const def of defaultHashtags) {
+    if (hashtags.length >= 10) break;
+    if (!seenHashtags.has(def.toLowerCase())) {
+      seenHashtags.add(def.toLowerCase());
+      hashtags.push(def);
+    }
+  }
+  if (hashtags.length > 15) hashtags = hashtags.slice(0, 15);
+
+  // Tags (15–25, repetition allowed, fallback if needed)
+  let rawTags = Array.isArray(data.tags) ? data.tags : [];
+  let tags: string[] = [];
+  const seenTags = new Set<string>();
+  for (const t of rawTags) {
+    if (typeof t !== 'string') continue;
+    const clean = t.trim().toLowerCase().replace(/^["']|["']$/g, '');
+    if (clean && !seenTags.has(clean)) {
+      seenTags.add(clean);
+      tags.push(clean);
+    }
+  }
+  const defaultTags = [
+    'relaxing piano music', 'peaceful piano music', 'sleep piano music',
+    'piano music for sleep', 'bamboo water sound', 'piano and water sounds',
+    'calming piano', 'meditation piano', 'stress relief music', 'deep sleep music',
+    'background piano music', 'soft piano music', 'soothing piano melodies',
+    'ambient piano soundscape', 'gentle piano for relaxation', 'study piano music'
+  ];
+  for (const def of defaultTags) {
+    if (tags.length >= 20) break;
+    if (!seenTags.has(def.toLowerCase())) {
+      seenTags.add(def.toLowerCase());
+      tags.push(def);
+    }
+  }
+  if (tags.length > 25) tags = tags.slice(0, 25);
+
+  return {
+    seo: { title, thumbnailText, description, hashtags, tags },
+    errorType: 'UNKNOWN_ERROR',
+    error: '',
+    failedPart: null,
+  };
+}
+
+function validateSEOContent(data: any, currentTitle?: string): YouTubeSEOContent | null {
+  return validateSEOContentDetailed(data, currentTitle).seo;
 }
 
 async function requestSEOFromKie(
   prompt: string,
   selectedModelId: GatewayModelId,
   routingMode: RoutingMode,
-  onStatusUpdate: (message: string) => void
+  currentTitle?: string,
+  onStatusUpdate: (message: string) => void = () => {}
 ): Promise<YouTubeSEOGenerationResponse> {
   const keyManager = ApiKeyManager.getInstance();
   const activeKeys = keyManager.getActiveKeys();
   if (!activeKeys.length) {
-    return { success: false, errorType: 'API_KEY_ERROR', errorMessage: 'Tidak ada Kunci KIE Aktif.', debugInfo: {
-      selectedModel: getModelUIName(selectedModelId), gatewayModelId: selectedModelId, errorType: 'API_KEY_ERROR', errorMessage: 'Tidak ada Kunci KIE Aktif.', time: new Date().toLocaleTimeString()
-    }};
+    return {
+      success: false,
+      errorType: 'API_KEY_ERROR',
+      errorMessage: 'Tidak ada Kunci KIE Aktif.',
+      debugInfo: {
+        selectedModel: getModelUIName(selectedModelId),
+        gatewayModelId: selectedModelId,
+        errorType: 'API_KEY_ERROR',
+        errorMessage: 'Tidak ada Kunci KIE Aktif.',
+        time: new Date().toLocaleTimeString()
+      }
+    };
   }
-  const models = routingMode === 'AUTO' ? Array.from(new Set([selectedModelId, ...AUTO_FALLBACK_CHAIN])) : [selectedModelId];
-  let key = routingMode === 'MANUAL' ? (keyManager.getManualSelectedKey() || activeKeys[0]) : (keyManager.getNextActiveKey() || activeKeys[0]);
+
+  const models = routingMode === 'AUTO'
+    ? Array.from(new Set([selectedModelId, ...AUTO_FALLBACK_CHAIN]))
+    : [selectedModelId];
+  let key = routingMode === 'MANUAL'
+    ? (keyManager.getManualSelectedKey() || activeKeys[0])
+    : (keyManager.getNextActiveKey() || activeKeys[0]);
+
+  const basePrompt = prompt;
+  let currentPrompt = basePrompt;
+  let lastFailure: { errorType: ErrorType; errorMessage: string } | null = null;
 
   for (const modelId of models) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       onStatusUpdate(`GENERATING YOUTUBE SEO... (${attempt}/3)`);
       try {
-        const payload = { model: modelId, stream: false, input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }], reasoning: { effort: 'high' } };
-        const res = await fetch('/api/kie/responses', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key.rawKey}` }, body: JSON.stringify(payload) });
-        const parsed = await parseKieResponse(res);
+        // KIE Responses API request: keep the official request shape, but make the
+        // SEO path resilient to transient upstream 5xx failures. The first request
+        // keeps reasoning enabled for quality. A 5xx recovery request retries the
+        // same full musical context without the optional reasoning field, which can
+        // avoid a gateway-side failure while preserving the actual SEO prompt.
+        // Force the KIE Responses model to return a machine-readable SEO package.
+        // This is the critical fix for the previous failure where KIE returned HTTP 200
+        // but the model text could not be parsed as JSON. The schema is supported by the
+        // Responses API contract used by the underlying GPT models.
+        const seoJsonSchema = {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            description: { type: 'string' },
+            hashtags: { type: 'array', items: { type: 'string' } },
+            tags: { type: 'array', items: { type: 'string' } },
+            thumbnailText: { type: 'string' }
+          },
+          required: ['title', 'description', 'hashtags', 'tags', 'thumbnailText'],
+          additionalProperties: false
+        };
+
+        const structuredTextFormat = {
+          type: 'json_schema',
+          name: 'youtube_seo_package',
+          strict: true,
+          schema: seoJsonSchema
+        };
+
+        const basePayload = {
+          model: modelId,
+          stream: false,
+          input: [{ role: 'user', content: [{ type: 'input_text', text: currentPrompt }] }],
+          reasoning: { effort: 'high' },
+          text: { format: structuredTextFormat }
+        };
+
+        let res: Response;
+        let parsed: ParsedKieResponse;
+        let usedRecoveryRequest = false;
+
+        const sendSeoRequest = async (payload: Record<string, any>) => {
+          const response = await fetch('/api/kie/responses', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${key.rawKey}`
+            },
+            body: JSON.stringify(payload)
+          });
+          const parsedResponse = await parseKieResponse(response);
+          return { response, parsedResponse };
+        };
+
+        // KIE contract ladder:
+        // 1) Structured JSON + reasoning (primary path)
+        // 2) Structured JSON without reasoning
+        // 3) Plain Responses request without the optional structured-output field
+        // 4) Plain streaming request as the final transport fallback
+        // This prevents an HTTP-200/non-JSON model response from reaching the old parser.
+        const plainPayload = { ...basePayload };
+        delete (plainPayload as any).text;
+        const noReasoningStructured = { ...basePayload };
+        delete (noReasoningStructured as any).reasoning;
+        const noReasoningPlain = { ...plainPayload };
+        const requestVariants: Record<string, any>[] = [
+          basePayload,
+          noReasoningStructured,
+          noReasoningPlain,
+          { ...noReasoningPlain, stream: true }
+        ];
+
+        ({ response: res, parsedResponse: parsed } = await sendSeoRequest(requestVariants[0]));
+
+        if ([500, 502, 503, 504].includes(res.status)) {
+          usedRecoveryRequest = true;
+          for (let variantIndex = 1; variantIndex < requestVariants.length; variantIndex++) {
+            await new Promise((resolve) => setTimeout(resolve, 900 * variantIndex));
+            ({ response: res, parsedResponse: parsed } = await sendSeoRequest(requestVariants[variantIndex]));
+            if (![500, 502, 503, 504].includes(res.status)) break;
+          }
+        }
+
         if (!res.ok) {
           const type = mapHttpStatusToErrorType(res.status);
           const message = parsed.assistantText || `KIE HTTP ${res.status}`;
+          lastFailure = { errorType: type, errorMessage: message };
           const debugInfo = {
-            selectedModel: getModelUIName(modelId), gatewayModelId: modelId, endpoint: 'https://api.kie.ai/codex/v1/responses', httpStatus: res.status, errorType: type, errorMessage: message, sanitizedResponseBody: sanitizeSafeBody(parsed.rawText || '', key.rawKey), time: new Date().toLocaleTimeString(), attempt
+            selectedModel: getModelUIName(modelId),
+            gatewayModelId: modelId,
+            endpoint: 'https://api.kie.ai/codex/v1/responses',
+            httpStatus: res.status,
+            errorType: type,
+            errorMessage: message,
+            sanitizedResponseBody: sanitizeSafeBody(parsed.rawText || '', key.rawKey),
+            time: new Date().toLocaleTimeString(),
+            attempt
           };
           if ([429, 500, 502, 503, 504].includes(res.status)) {
             if (attempt < 3) {
-              await new Promise(resolve => setTimeout(resolve, 800 * attempt));
+              await new Promise((resolve) => setTimeout(resolve, usedRecoveryRequest ? 1400 * attempt : 900 * attempt));
               continue;
             }
             if (routingMode === 'AUTO') break;
@@ -933,33 +1154,96 @@ async function requestSEOFromKie(
           if (routingMode === 'AUTO' && res.status === 422) break;
           return { success: false, errorType: type, errorMessage: message, debugInfo };
         }
-        let data: any = null;
-        try { data = JSON.parse(parsed.assistantText); } catch {}
-        const seo = validateSEOContent(data);
-        if (seo) {
-          keyManager.updateKeyStatus(key.id, 'ACTIVE');
-          return { success: true, seo, modelUsed: getModelUIName(modelId), gatewayModelId: modelId };
+
+        if (!parsed.assistantText || !parsed.assistantText.trim()) {
+          lastFailure = { errorType: 'MODEL_EMPTY_RESPONSE', errorMessage: 'Model mengembalikan respons kosong.' };
+          if (attempt < 3) {
+            currentPrompt = `${basePrompt}\n\nFOCUSED RETRY (MODEL_EMPTY_RESPONSE): Respons sebelumnya kosong. Kembalikan HANYA satu JSON object valid sesuai schema. Prioritaskan token untuk TITLE dan DESCRIPTION.`;
+            continue;
+          }
+          if (routingMode === 'AUTO') break;
+          continue;
         }
+
+        const parsedModel = parseModelJSON(parsed.assistantText);
+        if (parsedModel === INVALID_JSON) {
+          lastFailure = { errorType: 'INVALID_JSON', errorMessage: 'Model menghasilkan output yang tidak dapat diparse sebagai JSON.' };
+          if (attempt < 3) {
+            currentPrompt = `${basePrompt}\n\nFOCUSED RETRY (INVALID_JSON): Output sebelumnya tidak memenuhi structured JSON. Kembalikan hanya data sesuai schema yang diminta API. Jangan gunakan markdown, komentar, atau teks pembuka. Prioritaskan TITLE dan DESCRIPTION.`;
+            continue;
+          }
+          if (routingMode === 'AUTO') break;
+          continue;
+        }
+
+        const validation = validateSEOContentDetailed(parsedModel, currentTitle);
+        if (validation.seo) {
+          keyManager.updateKeyStatus(key.id, 'ACTIVE');
+          return { success: true, seo: validation.seo, modelUsed: getModelUIName(modelId), gatewayModelId: modelId };
+        }
+
+        lastFailure = { errorType: validation.errorType, errorMessage: validation.error };
+        if (attempt < 3) {
+          if (validation.failedPart === 'TITLE') {
+            currentPrompt = `${basePrompt}\n\nFOCUSED RETRY FOR TITLE (${validation.errorType}):\n${validation.error}\nCreate a substantially different, fresh base title based on Style Prompt #1–#20. Do not reuse the previous title structure or wording. Keep description valid (minimum 500 words, target around 600–750 words, maximum 1000 words). Return ONLY JSON.`;
+          } else if (validation.failedPart === 'DESCRIPTION') {
+            currentPrompt = `${basePrompt}\n\nFOCUSED RETRY FOR DESCRIPTION (${validation.errorType}):\n${validation.error}\nRewrite the description from scratch using the full Musical Identity (target around 600–750 words, minimum 500 words, maximum 1000 words). Do not reuse the previous paragraph structure. Zero BPM/keys/scores/track counts/album language. Return ONLY JSON.`;
+          } else {
+            currentPrompt = `${basePrompt}\n\nFOCUSED RETRY (${validation.errorType}):\n${validation.error}\nReturn ONLY valid JSON matching the schema.`;
+          }
+          continue;
+        }
+        if (routingMode === 'AUTO') break;
       } catch (err: any) {
-        if (attempt === 3) return { success: false, errorType: 'NETWORK_ERROR', errorMessage: err?.message || 'Koneksi gagal.', debugInfo: {
-          selectedModel: getModelUIName(modelId), gatewayModelId: modelId, endpoint: 'https://api.kie.ai/codex/v1/responses', errorType: 'NETWORK_ERROR', errorMessage: err?.message || 'Koneksi gagal.', time: new Date().toLocaleTimeString(), attempt
-        }};
+        lastFailure = { errorType: 'NETWORK_ERROR', errorMessage: err?.message || 'Koneksi gagal.' };
+        if (attempt === 3 && routingMode === 'AUTO') {
+          break;
+        }
+        if (attempt === 3) {
+          return {
+            success: false,
+            errorType: 'NETWORK_ERROR',
+            errorMessage: err?.message || 'Koneksi gagal.',
+            debugInfo: {
+              selectedModel: getModelUIName(modelId),
+              gatewayModelId: modelId,
+              endpoint: 'https://api.kie.ai/codex/v1/responses',
+              errorType: 'NETWORK_ERROR',
+              errorMessage: err?.message || 'Koneksi gagal.',
+              time: new Date().toLocaleTimeString(),
+              attempt
+            }
+          };
+        }
       }
     }
   }
-  return { success: false, errorType: 'INVALID_STRUCTURE', errorMessage: 'Model menghasilkan format SEO yang tidak memenuhi validation.', debugInfo: {
-    selectedModel: getModelUIName(selectedModelId), gatewayModelId: selectedModelId, errorType: 'INVALID_STRUCTURE', errorMessage: 'Format SEO tidak valid.', time: new Date().toLocaleTimeString()
-  }};
+
+  const finalErrorType = lastFailure?.errorType || 'INVALID_STRUCTURE';
+  const finalErrorMessage = lastFailure?.errorMessage || 'Gagal menghasilkan YouTube SEO.';
+
+  return {
+    success: false,
+    errorType: finalErrorType,
+    errorMessage: finalErrorMessage,
+    debugInfo: {
+      selectedModel: getModelUIName(selectedModelId),
+      gatewayModelId: selectedModelId,
+      errorType: finalErrorType,
+      errorMessage: finalErrorMessage,
+      time: new Date().toLocaleTimeString()
+    }
+  };
 }
 
 function buildYouTubeTitleContext(tracks: GeneratedTrackResult[]): string {
-  // IMPORTANT: title generation must use the complete 25-track dataset, but the
+  // IMPORTANT: title generation must use the complete 20-track dataset, but the
   // request sent to KIE must stay compact. Sending all long Style Prompt bodies
   // verbatim can make an otherwise valid title request unnecessarily large and
   // can trigger upstream HTTP 500 responses.
   const sorted = [...tracks]
     .sort((a, b) => a.batchNumber - b.batchNumber)
-    .slice(0, 25);
+    .slice(0, BATCH_SIZE);
 
   const frequency = (values: string[]) => {
     const counts = new Map<string, number>();
@@ -981,7 +1265,7 @@ function buildYouTubeTitleContext(tracks: GeneratedTrackResult[]): string {
 
   const perPrompt = sorted.map((t, i) => {
     // Keep a short semantic fingerprint from EVERY prompt rather than sending
-    // the full long prompt. This preserves all-25 coverage while controlling size.
+    // the full long prompt. This preserves all-20 coverage while controlling size.
     const excerpt = String(t.stylePrompt || '')
       .replace(/\s+/g, ' ')
       .replace(/\b\d+(?:\.\d+)?\s*BPM\b/gi, '')
@@ -993,13 +1277,13 @@ function buildYouTubeTitleContext(tracks: GeneratedTrackResult[]): string {
   }).join('\n');
 
   return [
-    'COMPLETE 25-PROMPT MUSICAL SUMMARY:',
+    'COMPLETE 20-PROMPT MUSICAL SUMMARY:',
     `Piano types: ${piano || 'Piano'}`,
     `Genres: ${genre || 'Ambient Piano'}`,
     `Use categories: ${category || 'Relaxation'}`,
     `Moods: ${mood || 'Peaceful'}`,
     '',
-    'SEMANTIC FINGERPRINT FROM ALL 25 STYLE PROMPTS:',
+    'SEMANTIC FINGERPRINT FROM ALL 20 STYLE PROMPTS:',
     perPrompt
   ].join('\n');
 }
@@ -1008,7 +1292,7 @@ function buildYouTubeTitlePrompt(tracks: GeneratedTrackResult[]): string {
   const context = buildYouTubeTitleContext(tracks);
   return `You are the YouTube title strategist for PETA PIANO AI.
 
-Analyze the 25 completed instrumental piano style prompts below and create ONE strong English YouTube title representing their dominant musical identity and listening purpose.
+Analyze the 20 completed instrumental piano style prompts below and create ONE strong English YouTube title representing their dominant musical identity and listening purpose.
 
 RULES:
 - Return ONLY one valid JSON object.
@@ -1039,7 +1323,7 @@ function parseYouTubeTitle(raw: string): string {
 }
 
 function buildLocalTitleFallback(tracks: GeneratedTrackResult[]): string {
-  const sorted = [...tracks].sort((a, b) => a.batchNumber - b.batchNumber).slice(0, 25);
+  const sorted = [...tracks].sort((a, b) => a.batchNumber - b.batchNumber).slice(0, BATCH_SIZE);
   const count = (values: string[]) => {
     const map = new Map<string, number>();
     for (const value of values) {
@@ -1087,7 +1371,7 @@ async function requestTitleFromKie(
   const key = routingMode === 'MANUAL'
     ? (keyManager.getManualSelectedKey() || activeKeys[0])
     : (keyManager.getNextActiveKey() || activeKeys[0]);
-  const prompt = buildYouTubeTitlePrompt(tracks.slice(0, 25));
+  const prompt = buildYouTubeTitlePrompt(tracks.slice(0, BATCH_SIZE));
 
   let lastFailure: YouTubeTitleErrorResponse | null = null;
 
@@ -1101,7 +1385,8 @@ async function requestTitleFromKie(
         const payload = {
           model: modelId,
           stream: false,
-          input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }]
+          input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }],
+          reasoning: { effort: 'high' }
         };
         const res = await fetch('/api/kie/responses', {
           method: 'POST',
@@ -1217,21 +1502,21 @@ async function requestTitleFromKie(
 export async function generateYouTubeTitle(
   tracks: GeneratedTrackResult[], selectedModelId: GatewayModelId, routingMode: RoutingMode, onStatusUpdate: (message: string) => void = () => {}
 ): Promise<YouTubeTitleGenerationResponse> {
-  if (tracks.length < 25) {
-    return { success: false, errorType: 'INVALID_STRUCTURE', errorMessage: 'Judul hanya dapat dibuat setelah 25 Style Prompt berhasil.', debugInfo: {
-      selectedModel: getModelUIName(selectedModelId), gatewayModelId: selectedModelId, errorType: 'INVALID_STRUCTURE', errorMessage: '25 Style Prompt belum lengkap.', time: new Date().toLocaleTimeString()
+  if (tracks.length < BATCH_SIZE) {
+    return { success: false, errorType: 'INVALID_STRUCTURE', errorMessage: 'Judul hanya dapat dibuat setelah 20 Style Prompt berhasil.', debugInfo: {
+      selectedModel: getModelUIName(selectedModelId), gatewayModelId: selectedModelId, errorType: 'INVALID_STRUCTURE', errorMessage: '20 Style Prompt belum lengkap.', time: new Date().toLocaleTimeString()
     }};
   }
-  return requestTitleFromKie(tracks.slice(0, 25), selectedModelId, routingMode, onStatusUpdate);
+  return requestTitleFromKie(tracks.slice(0, BATCH_SIZE), selectedModelId, routingMode, onStatusUpdate);
 }
 
 export async function generateYouTubeSEO(
   tracks: GeneratedTrackResult[], selectedModelId: GatewayModelId, routingMode: RoutingMode, currentTitle?: string, onStatusUpdate: (message: string) => void = () => {}
 ): Promise<YouTubeSEOGenerationResponse> {
-  if (tracks.length < 25) return { success: false, errorType: 'INVALID_STRUCTURE', errorMessage: 'SEO hanya dapat dibuat setelah 25 Style Prompt berhasil.', debugInfo: {
-    selectedModel: getModelUIName(selectedModelId), gatewayModelId: selectedModelId, errorType: 'INVALID_STRUCTURE', errorMessage: '25 Style Prompt belum lengkap.', time: new Date().toLocaleTimeString()
+  if (tracks.length < BATCH_SIZE) return { success: false, errorType: 'INVALID_STRUCTURE', errorMessage: 'SEO hanya dapat dibuat setelah 20 Style Prompt berhasil.', debugInfo: {
+    selectedModel: getModelUIName(selectedModelId), gatewayModelId: selectedModelId, errorType: 'INVALID_STRUCTURE', errorMessage: '20 Style Prompt belum lengkap.', time: new Date().toLocaleTimeString()
   }};
-  return requestSEOFromKie(buildYouTubeSEOContentPrompt(tracks.slice(0, 25), currentTitle), selectedModelId, routingMode, onStatusUpdate);
+  return requestSEOFromKie(buildYouTubeSEOContentPrompt(tracks.slice(0, BATCH_SIZE), currentTitle), selectedModelId, routingMode, currentTitle, onStatusUpdate);
 }
 
 

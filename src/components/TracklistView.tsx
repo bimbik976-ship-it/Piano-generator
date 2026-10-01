@@ -65,7 +65,7 @@ export const TracklistView: React.FC<TracklistViewProps> = ({
             <span className="text-xs text-slate-400">Hanya Menyimpan Prompt Berhasil</span>
           </div>
           <h2 className="text-lg sm:text-xl font-extrabold text-white">
-            Koleksi Track Terverifikasi ({tracks.length} / 25)
+            Koleksi Track Terverifikasi ({tracks.length} / 20)
           </h2>
         </div>
 

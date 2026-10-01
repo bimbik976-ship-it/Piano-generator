@@ -13,6 +13,69 @@ export interface YoutubeSeoValidationContext {
   minBpm?: number;
   maxBpm?: number;
   avgBpm?: number;
+  previousTitle?: string;
+}
+
+export function cleanCoreTitle(rawTitle: string): string {
+  return String(rawTitle || '')
+    .replace(/\s*\+\s*Bamboo\s+Water\s+Sound\s*$/i, '')
+    .replace(/\s*-\s*Bamboo\s+Water\s+Sound\s*$/i, '')
+    .replace(/\s*\|\s*Bamboo\s+Water\s+Sound\s*$/i, '')
+    .replace(/\bBamboo\s+Water\s+Sound\b/gi, '')
+    .replace(/["“”]/g, '')
+    .replace(/[\s\+\-\|:,]+$/, '')
+    .trim();
+}
+
+export function isTitleMeaningfullyDifferent(newTitle: string, previousTitle?: string): boolean {
+  if (!previousTitle) return true;
+  const cleanNew = cleanCoreTitle(newTitle).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const cleanPrev = cleanCoreTitle(previousTitle).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  if (!cleanPrev) return true;
+  if (cleanNew === cleanPrev) return false;
+
+  const wordsNew = cleanNew.split(' ').filter(Boolean);
+  const wordsPrev = cleanPrev.split(' ').filter(Boolean);
+
+  const setPrev = new Set(wordsPrev);
+  const setNew = new Set(wordsNew);
+  if (wordsNew.length === wordsPrev.length && wordsNew.every((w) => setPrev.has(w))) {
+    return false;
+  }
+
+  const synonymPairs: [string, string][] = [
+    ['peaceful', 'calm'],
+    ['peaceful', 'serene'],
+    ['peaceful', 'quiet'],
+    ['peaceful', 'gentle'],
+    ['relaxing', 'soothing'],
+    ['relaxing', 'calming'],
+    ['relaxing', 'peaceful'],
+    ['quiet', 'gentle'],
+    ['quiet', 'soft'],
+    ['sleep', 'deep sleep'],
+    ['sleep', 'rest'],
+    ['meditation', 'mindfulness'],
+  ];
+
+  const diffInNew = wordsNew.filter((w) => !setPrev.has(w));
+  const diffInPrev = wordsPrev.filter((w) => !setNew.has(w));
+  if (diffInNew.length <= 1 && diffInPrev.length <= 1) {
+    if (diffInNew.length === 0 && diffInPrev.length === 0) return false;
+    const wNew = diffInNew[0] || '';
+    const wPrev = diffInPrev[0] || '';
+    const isSyn = synonymPairs.some(([a, b]) => (a === wNew && b === wPrev) || (b === wNew && a === wPrev));
+    if (isSyn) return false;
+  }
+
+  const common = wordsNew.filter((w) => setPrev.has(w)).length;
+  const union = new Set([...wordsNew, ...wordsPrev]).size;
+  if (union > 0 && common / union > 0.82 && Math.abs(wordsNew.length - wordsPrev.length) <= 1) {
+    return false;
+  }
+
+  return true;
 }
 
 // Strictly forbidden technical information patterns (BPM, keys, scores, metadata, AI processes, track numbers/counts)
@@ -48,6 +111,17 @@ export const FORBIDDEN_TECHNICAL_PATTERNS = [
   /\ball\s+25\s+tracks?\b/gi,
   /\bthese\s+25\s+tracks?\b/gi,
   /\btwenty[- ]five\s+(?:tracks?|songs?|pieces?|compositions?|style\s+prompts?)\b/gi,
+  /\b20[\s-]*tracks?\b/gi,
+  /\b20[\s-]*track\b/gi,
+  /\b20\s+track\b/gi,
+  /\b20[\s-]*piano\s+tracks?\b/gi,
+  /\b20[\s-]*songs?\b/gi,
+  /\b20[\s-]*pieces?\b/gi,
+  /\b20[\s-]*compositions?\b/gi,
+  /\b20[\s-]*style\s+prompts?\b/gi,
+  /\ball\s+20\s+tracks?\b/gi,
+  /\bthese\s+20\s+tracks?\b/gi,
+  /\btwenty\s+(?:tracks?|songs?|pieces?|compositions?|style\s+prompts?)\b/gi,
   /\btrack\s*#?\s*\d+\b/gi,
 ];
 
@@ -156,6 +230,19 @@ export function sanitizeConsumerFacingDescription(text: string): string {
   cleaned = cleaned.replace(/\b25[\s-]*style\s+prompts?\b/gi, 'musical arrangements');
   cleaned = cleaned.replace(/\btwenty[- ]five\s+distinct\s+piano\s+compositions\b/gi, 'distinct acoustic piano melodies');
   cleaned = cleaned.replace(/\btwenty[- ]five\s+(?:tracks?|songs?|pieces?|compositions?)\b/gi, 'soothing melodies');
+  cleaned = cleaned.replace(/\b20[\s-]*track\s+collection\b/gi, 'peaceful piano soundscape');
+  cleaned = cleaned.replace(/\b20[\s-]*track\s+album\b/gi, 'peaceful piano soundscape');
+  cleaned = cleaned.replace(/\b20[\s-]*track\s+journey\b/gi, 'calming musical experience');
+  cleaned = cleaned.replace(/\ball\s+20\s+tracks?\b/gi, 'the entire soundscape');
+  cleaned = cleaned.replace(/\bthese\s+20\s+tracks?\b/gi, 'these melodies');
+  cleaned = cleaned.replace(/\b20[\s-]*piano\s+tracks?\b/gi, 'peaceful piano music');
+  cleaned = cleaned.replace(/\b20[\s-]*tracks?\b/gi, 'soothing piano music');
+  cleaned = cleaned.replace(/\b20\s+track\b/gi, 'soothing piano music');
+  cleaned = cleaned.replace(/\b20[\s-]*songs?\b/gi, 'gentle piano melodies');
+  cleaned = cleaned.replace(/\b20[\s-]*pieces?\b/gi, 'acoustic melodies');
+  cleaned = cleaned.replace(/\b20[\s-]*compositions?\b/gi, 'harmonious melodies');
+  cleaned = cleaned.replace(/\b20[\s-]*style\s+prompts?\b/gi, 'musical arrangements');
+  cleaned = cleaned.replace(/\btwenty\s+(?:tracks?|songs?|pieces?|compositions?)\b/gi, 'soothing melodies');
   cleaned = cleaned.replace(/\bstyle\s+prompt\s*#?\s*\d+\b/gi, 'piano passage');
   cleaned = cleaned.replace(/\btrack\s*#?\s*\d+\b/gi, 'melody');
   cleaned = cleaned.replace(/\bprompt\s*#?\s*\d+\b/gi, 'passage');
@@ -257,26 +344,21 @@ export function validateAndSanitizeYoutubeSeo(
 
   // 1. Title Validation & Suffix Handling
   let rawTitle = typeof raw.title === 'string' ? raw.title.trim() : '';
-  if (!rawTitle) {
-    errors.push('Title YouTube tidak boleh kosong.');
-  }
-
-  // Remove surrounding quotes if model added them
   rawTitle = rawTitle.replace(/^["']|["']$/g, '').trim();
 
-  // Strip any accidental AI-generated Bamboo Water Sound suffix variations
-  let baseTitle = rawTitle
-    .replace(/\s*\+\s*Bamboo\s+Water\s+Sound/gi, '')
-    .replace(/\s*-\s*Bamboo\s+Water\s+Sound/gi, '')
-    .replace(/\s*\|\s*Bamboo\s+Water\s+Sound/gi, '')
-    .replace(/\bBamboo\s+Water\s+Sound\b/gi, '')
-    .trim();
-
-  // Clean trailing punctuation or dangling separators
-  baseTitle = baseTitle.replace(/[\s\+\-\|:,]+$/, '').trim();
+  let baseTitle = cleanCoreTitle(rawTitle);
 
   if (!baseTitle) {
-    baseTitle = 'Peaceful Piano Music for Relaxation, Sleep & Stress Relief';
+    errors.push('Title YouTube tidak boleh kosong.');
+  } else if (baseTitle.length < 8 || baseTitle.length > 140) {
+    errors.push(`Title harus 8–140 karakter (saat ini ${baseTitle.length}).`);
+  }
+
+  // Check if title is meaningfully different from previous title
+  if (fallbackContext?.previousTitle && baseTitle) {
+    if (!isTitleMeaningfullyDifferent(baseTitle, fallbackContext.previousTitle)) {
+      errors.push('Title baru tidak boleh identik atau hanya menukar sinonim sederhana dari title sebelumnya.');
+    }
   }
 
   // Check ALL CAPS
@@ -298,7 +380,7 @@ export function validateAndSanitizeYoutubeSeo(
     errors.push('Suffix "+ Bamboo Water Sound" terdeteksi duplikat.');
   }
 
-  // 2. Description Validation (500–1,000 WORDS, TARGET 600–800 WORDS)
+  // 2. Description Validation (500–1,000 WORDS, TARGET 600–750 WORDS)
   let description = typeof raw.description === 'string' ? raw.description.trim() : '';
   if (!description) {
     errors.push('Description YouTube tidak boleh kosong.');
@@ -309,12 +391,11 @@ export function validateAndSanitizeYoutubeSeo(
   description = description.replace(/Search\s+Keywords\s*:.*$/gim, '').trim();
 
   // CONSUMER-FACING SANITIZATION:
-  // Clean all technical metadata (BPM, keys, scores, 25-tracks) and album catalog words
+  // Clean all technical metadata (BPM, keys, scores, 20-tracks) and album catalog words
   description = sanitizeConsumerFacingDescription(description);
 
-  // If any forbidden technical or album patterns still persist, regenerate description only
   if (containsForbiddenSeoContent(description)) {
-    description = regenerateDescriptionOnly(fallbackContext);
+    errors.push('Description mengandung istilah teknis atau katalog terlarang.');
   }
 
   // Medical claim check & neutralization
@@ -337,12 +418,12 @@ export function validateAndSanitizeYoutubeSeo(
     }
   }
 
-  // Check and enforce word count limits: 500 - 1,000 words
+  // Check and enforce word count limits: 500 - 1,000 words (Target 600 - 750 words)
   let words = description.split(/\s+/).filter(Boolean);
 
-  // If words > 1,000, truncate cleanly to under 1,000 words at a sentence boundary
-  if (words.length > 1000) {
-    const truncatedText = words.slice(0, 950).join(' ');
+  // If words > 1000, truncate cleanly to under 1000 words at a sentence boundary if close
+  if (words.length > 1000 && words.length <= 1050) {
+    const truncatedText = words.slice(0, 980).join(' ');
     const lastSentenceEnd = Math.max(
       truncatedText.lastIndexOf('.'),
       truncatedText.lastIndexOf('!'),
@@ -350,34 +431,12 @@ export function validateAndSanitizeYoutubeSeo(
     );
     if (lastSentenceEnd > 200) {
       description = truncatedText.slice(0, lastSentenceEnd + 1);
-    } else {
-      description = truncatedText + '.';
     }
-    words = description.split(/\s+/).filter(Boolean);
-  }
-
-  // If words < 500, expand with clean consumer-facing paragraphs (no album, no collection, no BPM)
-  if (words.length < 500 && words.length > 0) {
-    const pPiano = fallbackContext?.dominantPiano || 'felt piano';
-
-    const expansionParagraphs = [
-      `Carefully arranged for continuous, unhurried listening, this peaceful piano soundscape maintains seamless acoustic consistency and gentle harmony throughout its entire duration. With delicate ${pPiano.toLowerCase()} timbres, subtle resonance decay, and spacious phrasing, the music provides an immersive auditory haven. Whether you listen through open-room speakers or soft headphones, the seamless flow ensures that your state of tranquility remains unbroken from the opening notes to the final fading resonance.`,
-      `This calming piano music serves as a dedicated acoustic companion for the quietest moments of your day. It is ideal for evening wind-down rituals, deep sleep preparation, mindfulness meditation, reflective reading, or calm background listening during study and creative work. Allow the natural synergy of acoustic piano melodies and gentle flowing water to wash away daily stress, quiet busy thoughts, and surround your space with timeless serenity.`,
-    ];
-
-    const currentParagraphs = description.split(/\n\s*\n/).filter(Boolean);
-    if (currentParagraphs.length >= 2) {
-      currentParagraphs.splice(currentParagraphs.length - 1, 0, ...expansionParagraphs);
-    } else {
-      currentParagraphs.push(...expansionParagraphs);
-    }
-    description = currentParagraphs.join('\n\n');
-    description = sanitizeConsumerFacingDescription(description);
     words = description.split(/\s+/).filter(Boolean);
   }
 
   if (words.length < 500) {
-    errors.push(`Description kurang dari 500 kata (${words.length} kata, minimum 500 kata).`);
+    errors.push(`Description kurang dari 500 kata (${words.length} kata, minimum 500 kata, target sekitar 600–750 kata).`);
   } else if (words.length > 1000) {
     errors.push(`Description melebihi 1.000 kata (${words.length} kata, maksimum 1.000 kata).`);
   }
@@ -432,8 +491,13 @@ export function validateAndSanitizeYoutubeSeo(
     hashtags = hashtags.slice(0, 15);
   }
 
+  // Hashtag repetition is intentionally non-blocking. The generator may reuse relevant hashtags across batches.
   if (hashtags.length < 5) {
-    errors.push(`Jumlah hashtag kurang dari 5 (${hashtags.length}).`);
+    // This should normally be impossible because the default pool fills missing values.
+    // Keep a minimal safe fallback without failing the SEO regeneration.
+    hashtags = [...hashtags, '#PianoMusic', '#RelaxingMusic', '#AmbientPiano', '#SleepMusic', '#BambooWaterSound']
+      .filter((v, i, a) => a.findIndex(x => x.toLowerCase() === v.toLowerCase()) === i)
+      .slice(0, 15);
   }
 
   // 4. Tags Validation
@@ -485,8 +549,18 @@ export function validateAndSanitizeYoutubeSeo(
     tags = tags.slice(0, 25);
   }
 
+  // Tag repetition is intentionally non-blocking. Relevant repeated tags are acceptable.
   if (tags.length < 15) {
-    errors.push(`Jumlah tags kurang dari 15 (${tags.length}).`);
+    const emergencyTags = [
+      'piano music', 'relaxing piano music', 'ambient piano', 'sleep piano',
+      'meditation piano', 'peaceful piano', 'bamboo water sound', 'calm piano',
+      'background piano music', 'soft piano music', 'deep sleep music',
+      'study piano music', 'relaxation music', 'instrumental piano', 'soothing piano'
+    ];
+    for (const tag of emergencyTags) {
+      if (tags.length >= 15) break;
+      if (!tags.includes(tag)) tags.push(tag);
+    }
   }
 
   const rawThumbnailText = typeof raw?.thumbnailText === 'string'

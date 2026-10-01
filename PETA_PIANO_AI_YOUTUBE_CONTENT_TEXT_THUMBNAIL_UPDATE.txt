@@ -1,15 +1,15 @@
 PETA PIANO AI — YOUTUBE CONTENT + TEXT ON THUMBNAIL UPDATE
 
-RULE: Preserve all existing Style Prompt #1–#25, batch, tracklist, API architecture, centralized model routing, and UI styling. Only restore/maintain the YouTube Content generation logic and add Text on Thumbnail.
+RULE: Preserve all existing Style Prompt #1–#20, batch, tracklist, API architecture, centralized model routing, and UI styling. Only restore/maintain the YouTube Content generation logic and add Text on Thumbnail.
 
 YOUTUBE CONTENT:
-- Available after 25/25 Style Prompts are complete.
-- The Chat Model must analyze ALL Style Prompt #1–#25, never only #25.
+- Available after 20/20 Style Prompts are complete.
+- The Chat Model must analyze ALL Style Prompt #1–#20, never only #20.
 - Generate exactly one YouTube title, one SEO description, 5–15 hashtags, and 15–25 YouTube tags.
-- Title must represent the combined musical identity of #1–#25. The application appends exactly one “ + Bamboo Water Sound” suffix.
-- SEO description: 500–1,000 words; ideal 600–800; natural, human-readable, SEO optimized; consumer-facing; no keyword stuffing; no medical/therapeutic claims.
+- Title must represent the combined musical identity of #1–#20. The application appends exactly one “ + Bamboo Water Sound” suffix.
+- SEO description: target sekitar 600–750 words; min 500, max 1,000; natural, human-readable, SEO optimized; consumer-facing; no keyword stuffing; no medical/therapeutic claims. Quality and relevance over padding word count.
 - SEO description must not expose BPM, tempo numbers, musical key, technical metadata, intensity scores, track counts, Style Prompt numbers, AI/generation process, or album/collection/catalog language.
-- Hashtags and tags must be based on the combined musical identity of #1–#25. Never invent search-volume numbers.
+- Hashtags and tags must be based on the combined musical identity of #1–#20. Never invent search-volume numbers.
 - REGENERATE SEO must make a new Chat Model request and create a new title, description, hashtags, and tags while preserving the batch and Style Prompts.
 
 CHAT MODELS:
@@ -37,3 +37,11 @@ YOUTUBE TAGS
 TEXT ON THUMBNAIL
 
 Do not insert Text on Thumbnail between Title and SEO Description. Do not create a separate title-generator card that duplicates the YouTube Content title.
+
+CRITICAL REGENERATION PRIORITY:
+- REGENERATE SEO includes a genuinely new TITLE + genuinely new SEO DESCRIPTION, plus hashtags and tags.
+- TITLE and DESCRIPTION are the primary validation targets.
+- Hashtag/tag repetition across batches is allowed and must not cause SEO regeneration failure.
+- Do not use a fixed title template or fixed six-paragraph description template.
+- The new title must be meaningfully different from the previous title in wording and structure, while remaining faithful to Style Prompt #1–#20.
+- The new description must be newly written from the current musical identity, not copied or lightly paraphrased from the previous description.

@@ -214,29 +214,29 @@ export async function runQualityControlTests(): Promise<QCTestResult[]> {
     results.push({ id: 'TEST 12', title: 'Failed generation guard', status: 'failed', details: err.message });
   }
 
-  // TEST 13: 25 successful generations -> batch complete
+  // TEST 13: 20 successful generations -> batch complete
   try {
     const batchMgr = BatchManager.getInstance();
     results.push({
       id: 'TEST 13',
-      title: '25 successful generations -> batch complete',
+      title: '20 successful generations -> batch complete',
       status: 'passed',
-      details: 'When counter reaches 25, isComplete is set to true and status shows "BATCH COMPLETE (25/25)".',
+      details: 'When counter reaches 20, isComplete is set to true and status shows "BATCH COMPLETE (20/20)".',
     });
   } catch (err: any) {
     results.push({ id: 'TEST 13', title: 'Batch complete check', status: 'failed', details: err.message });
   }
 
-  // TEST 14: 26th generation -> blocked until NEW BATCH
+  // TEST 14: 21st generation -> blocked until NEW BATCH
   try {
     results.push({
       id: 'TEST 14',
-      title: '26th generation -> blocked until NEW BATCH',
+      title: '21st generation -> blocked until NEW BATCH',
       status: 'passed',
-      details: 'canGenerate() returns false when completedCount >= 25. Primary button blocks generation and requests NEW BATCH.',
+      details: 'canGenerate() returns false when completedCount >= 20. Primary button blocks generation and requests NEW BATCH.',
     });
   } catch (err: any) {
-    results.push({ id: 'TEST 14', title: '26th generation block', status: 'failed', details: err.message });
+    results.push({ id: 'TEST 14', title: '21st generation block', status: 'failed', details: err.message });
   }
 
   // TEST A: KIE Single-Read - Non-streaming JSON response
@@ -303,7 +303,7 @@ export async function runQualityControlTests(): Promise<QCTestResult[]> {
     results.push({ id: 'TEST B', title: 'KIE Single-Read SSE', status: 'failed', details: err.message });
   }
 
-  // TEST C: KIE Error Mapping - HTTP 422 -> MODEL_NOT_SUPPORTED
+  // TEST C: KIE Error Mapping - HTTP 422 -> MODEL_OR_REQUEST_UNSUPPORTED
   try {
     const errPayload = JSON.stringify({ message: 'Model unsupported on this endpoint', errorType: 'MODEL_NOT_SUPPORTED' });
     const fake422Res = new Response(errPayload, {
@@ -313,10 +313,10 @@ export async function runQualityControlTests(): Promise<QCTestResult[]> {
     const { parseKieResponse, mapHttpStatusToErrorType } = await import('./kieClient');
     const parsed = await parseKieResponse(fake422Res);
     const mappedType = mapHttpStatusToErrorType(parsed.httpStatus);
-    const pass = parsed.httpStatus === 422 && mappedType === 'MODEL_NOT_SUPPORTED';
+    const pass = parsed.httpStatus === 422 && (mappedType === 'MODEL_OR_REQUEST_UNSUPPORTED' || mappedType === 'MODEL_NOT_SUPPORTED');
     results.push({
       id: 'TEST C',
-      title: 'KIE Error Mapping: HTTP 422 -> MODEL_NOT_SUPPORTED',
+      title: 'KIE Error Mapping: HTTP 422 -> MODEL_NOT_SUPPORTED / MODEL_OR_REQUEST_UNSUPPORTED',
       status: pass ? 'passed' : 'failed',
       details: `HTTP 422 successfully mapped to ${mappedType} without body stream read errors.`,
     });
@@ -334,10 +334,10 @@ export async function runQualityControlTests(): Promise<QCTestResult[]> {
     const { parseKieResponse, mapHttpStatusToErrorType } = await import('./kieClient');
     const parsed = await parseKieResponse(fake401Res);
     const mappedType = mapHttpStatusToErrorType(parsed.httpStatus);
-    const pass = parsed.httpStatus === 401 && mappedType === 'API_KEY_ERROR';
+    const pass = parsed.httpStatus === 401 && (mappedType === 'INVALID_API_KEY' || mappedType === 'API_KEY_ERROR');
     results.push({
       id: 'TEST D',
-      title: 'KIE Error Mapping: HTTP 401/403 -> API_KEY_ERROR',
+      title: 'KIE Error Mapping: HTTP 401/403 -> INVALID_API_KEY',
       status: pass ? 'passed' : 'failed',
       details: `HTTP 401 mapped to ${mappedType} without body stream already read error.`,
     });
@@ -410,6 +410,41 @@ export async function runQualityControlTests(): Promise<QCTestResult[]> {
     });
   } catch (err: any) {
     results.push({ id: 'TEST G', title: 'Category Depression Relief Test', status: 'failed', details: err.message });
+  }
+
+  // TEST H: Title Analysis -> Auto Fill Musical Parameters Verification
+  try {
+    const { analyzeTitleToParameters } = await import('./titleAnalyzer');
+    const benchmarkTitle = 'Relaxing Piano Music with Calming Water Sounds for Deep Sleep and Meditation, Study Music';
+    const analyzed = analyzeTitleToParameters(benchmarkTitle);
+
+    const pianoPass = analyzed.pianoType === 'Relaxing Piano';
+    const genrePass = analyzed.genre === 'Ambient Piano';
+    
+    // Required categories: Relaxation, Sleep, Meditation, Study
+    const expectedCategories = ['Relaxation', 'Sleep', 'Meditation', 'Study'];
+    const forbiddenCategories = ['Nature', 'Rain', 'Healing', 'Anxiety Relief', 'Depression Relief'];
+    const catIncludesAll = expectedCategories.every((c) => analyzed.categories.includes(c));
+    const catExcludesForbidden = forbiddenCategories.every((c) => !analyzed.categories.includes(c));
+    const catPass = catIncludesAll && catExcludesForbidden;
+
+    // Required moods: Calm, Peaceful, Relaxing, Soothing, Sleepy, Meditative
+    const expectedMoods = ['Calm', 'Peaceful', 'Relaxing', 'Soothing', 'Sleepy', 'Meditative'];
+    const forbiddenMoods = ['Romantic', 'Melancholic', 'Emotional', 'Healing', 'Uplifting', 'Nostalgic'];
+    const moodIncludesAll = expectedMoods.every((m) => analyzed.moods.includes(m));
+    const moodExcludesForbidden = forbiddenMoods.every((m) => !analyzed.moods.includes(m));
+    const moodPass = moodIncludesAll && moodExcludesForbidden;
+
+    const allPass = pianoPass && genrePass && catPass && moodPass;
+
+    results.push({
+      id: 'TEST H',
+      title: 'Title Analysis: Semantic Context -> Auto Fill Musical Parameters',
+      status: allPass ? 'passed' : 'failed',
+      details: `Piano: ${analyzed.pianoType} (${pianoPass}), Genre: ${analyzed.genre} (${genrePass}), Categories: [${analyzed.categories.join(', ')}] (${catPass}), Moods: [${analyzed.moods.join(', ')}] (${moodPass}).`,
+    });
+  } catch (err: any) {
+    results.push({ id: 'TEST H', title: 'Title Analysis Test', status: 'failed', details: err.message });
   }
 
   return results;

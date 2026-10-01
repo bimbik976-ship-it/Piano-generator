@@ -60,7 +60,7 @@ export const YoutubeContentCard: React.FC<YoutubeContentCardProps> = ({
               </h3>
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[10px] font-bold text-emerald-300 flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3" />
-                25 Track Dianalisis
+                20 Track Dianalisis
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
@@ -146,7 +146,7 @@ export const YoutubeContentCard: React.FC<YoutubeContentCardProps> = ({
           <label className="text-xs font-bold text-slate-300 tracking-wider uppercase flex items-center gap-1.5">
             <span className="text-amber-400 font-mono">SEO DESCRIPTION</span>
             <span className="text-[10px] text-slate-400 font-normal">
-              ({descriptionWordCount} kata • {paragraphCount} paragraf • Target 500–1.000 kata)
+              ({descriptionWordCount} kata • {paragraphCount} paragraf • Target sekitar 600–750 kata)
             </span>
           </label>
           <button
@@ -228,7 +228,7 @@ export const YoutubeContentCard: React.FC<YoutubeContentCardProps> = ({
       </div>
 
       <div className="pt-2 border-t border-[#1e2330] flex items-center justify-between text-[11px] text-slate-500">
-        <span>Tahap Content Generation • Style Prompt #1–#25 Tidak Terpengaruh</span>
+        <span>Tahap Content Generation • Style Prompt #1–#20 Tidak Terpengaruh</span>
         <span>{new Date(content.generatedAt).toLocaleTimeString()}</span>
       </div>
     </div>

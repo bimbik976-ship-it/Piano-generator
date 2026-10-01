@@ -88,8 +88,8 @@ export function categorizeHttpStatus(status: number): DiagnosticCategory {
  * - Endpoint: POST https://api.kie.ai/codex/v1/responses
  * - Browser request: same-origin proxy with Authorization + Content-Type
  * - Upstream request: server proxy sends exactly Authorization + Content-Type
- * - Payload: EXACTLY { model, stream: false, input: [ { role: "user", content: [ { type: "input_text", text: "Reply with exactly: KIE TEST OK" } ] } ] }
- * - NO tools, web search, function calling, response_format, json_schema, temperature, top_p, penalties, unnecessary parameters.
+ * - Payload uses the documented Responses API fields: model, stream, input, reasoning.
+ * - NO tools, web search, function calling, response_format, json_schema, temperature, top_p, penalties, or unnecessary parameters.
  * - Read response body EXACTLY ONCE.
  */
 export async function runSingleModelConnectionTest(
@@ -111,6 +111,7 @@ export async function runSingleModelConnectionTest(
         ],
       },
     ],
+    reasoning: { effort: 'high' },
   };
 
   const payloadString = JSON.stringify(minimalPayload);

@@ -50,27 +50,36 @@ export function extractKieText(response: unknown): string {
 function extractFromObject(obj: Record<string, unknown>): string {
   const collectedTexts: string[] = [];
 
-  // Priority 1: Check response.output array
+  // Priority 1: Check response.output array.
+  // KIE Responses can contain reasoning items and message items. For JSON tasks,
+  // ONLY the assistant message is the model payload; reasoning text must never be
+  // concatenated with it because that can make an otherwise valid JSON response
+  // impossible to parse.
   const output = obj.output;
   if (Array.isArray(output)) {
-    for (const item of output) {
+    const messageItems = output.filter((item) => {
+      if (!item || typeof item !== 'object') return false;
+      const type = (item as Record<string, unknown>).type;
+      return type === 'message' || type === 'assistant';
+    });
+    const itemsToRead = messageItems.length > 0 ? messageItems : output;
+
+    for (const item of itemsToRead) {
       if (!item || typeof item !== 'object') continue;
       const itemRecord = item as Record<string, unknown>;
 
-      // Check contents inside item
       if (Array.isArray(itemRecord.content)) {
         for (const c of itemRecord.content) {
           if (!c || typeof c !== 'object') continue;
           const cRecord = c as Record<string, unknown>;
-          if (typeof cRecord.text === 'string' && cRecord.text) {
-            collectedTexts.push(cRecord.text);
-          } else if (typeof cRecord.output_text === 'string' && cRecord.output_text) {
+          if (typeof cRecord.output_text === 'string' && cRecord.output_text) {
             collectedTexts.push(cRecord.output_text);
+          } else if (typeof cRecord.text === 'string' && cRecord.text) {
+            collectedTexts.push(cRecord.text);
           }
         }
       }
 
-      // Check direct text or output_text on the output item itself
       if (typeof itemRecord.output_text === 'string' && itemRecord.output_text) {
         collectedTexts.push(itemRecord.output_text);
       } else if (typeof itemRecord.text === 'string' && itemRecord.text) {

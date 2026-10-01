@@ -1,4 +1,5 @@
 import { BatchState, YouTubeSEOContent } from '../types';
+import { BATCH_SIZE } from '../config/batch';
 
 const STORAGE_KEYS = {
   CURRENT_BATCH: 'peta_piano_current_batch',
@@ -58,21 +59,21 @@ export class BatchManager {
   }
 
   public canGenerate(): boolean {
-    return this.state.completedCount < 25 && !this.state.isComplete;
+    return this.state.completedCount < BATCH_SIZE && !this.state.isComplete;
   }
 
   /**
    * Only called upon 100% verified, validated, unique track generation
    */
   public incrementOnSuccess(): { newCount: number; isComplete: boolean } {
-    if (this.state.completedCount >= 25) {
+    if (this.state.completedCount >= BATCH_SIZE) {
       this.state.isComplete = true;
       this.persist();
-      return { newCount: 25, isComplete: true };
+      return { newCount: BATCH_SIZE, isComplete: true };
     }
 
     this.state.completedCount += 1;
-    if (this.state.completedCount === 25) {
+    if (this.state.completedCount === BATCH_SIZE) {
       this.state.isComplete = true;
       this.state.completedAt = Date.now();
     }
@@ -82,8 +83,8 @@ export class BatchManager {
 
 
   /**
-   * Stores the single YouTube title generated from the completed 25-track batch.
-   * This never affects the 25-track generation counter.
+   * Stores the single YouTube title generated from the completed 20-track batch.
+   * This never affects the 20-track generation counter.
    */
   public setYouTubeTitle(title: string): BatchState {
     this.state.youtubeTitle = title;
@@ -115,7 +116,7 @@ export class BatchManager {
   }
 
   /**
-   * Starts a brand new batch of 25 prompts.
+   * Starts a brand new batch of 20 prompts.
    * Old tracks in tracklist are kept intact unless user explicitly selects Clear.
    */
   public startNewBatch(): BatchState {

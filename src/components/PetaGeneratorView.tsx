@@ -14,7 +14,8 @@ import {
   Flame,
   Activity,
   Video,
-  Copy as CopyIcon
+  Copy as CopyIcon,
+  Wand2
 } from 'lucide-react';
 import {
   BatchState,
@@ -34,7 +35,9 @@ import {
 } from '../config/options';
 import { MODEL_CONFIG, getModelUIName } from '../config/models';
 import { StyleIntensityVisualizer } from './StyleIntensityVisualizer';
+import { BATCH_SIZE } from '../config/batch';
 import { SafeDebugCard } from './SafeDebugCard';
+import { analyzeTitleToParameters, TitleAnalysisResult } from '../services/titleAnalyzer';
 
 interface PetaGeneratorViewProps {
   batchState: BatchState;
@@ -98,9 +101,26 @@ export const PetaGeneratorView: React.FC<PetaGeneratorViewProps> = ({
   const [copiedTags, setCopiedTags] = useState(false);
   const [copiedThumbnail, setCopiedThumbnail] = useState(false);
   const [expandedSection, setExpandedSection] = useState<'options' | 'result' | 'all'>('all');
+  const [inputTitle, setInputTitle] = useState('');
+  const [analysisResult, setAnalysisResult] = useState<TitleAnalysisResult | null>(null);
+
+  const handleAnalyzeTitle = (customTitle?: string) => {
+    const titleToAnalyze = (customTitle ?? inputTitle).trim();
+    if (!titleToAnalyze) return;
+
+    const result = analyzeTitleToParameters(titleToAnalyze);
+    onUpdateSettings({
+      ...settings,
+      pianoType: result.pianoType,
+      genre: result.genre,
+      categories: result.categories,
+      moods: result.moods,
+    });
+    setAnalysisResult(result);
+  };
 
   const nextNumber = batchState.completedCount + 1;
-  const isBatchComplete = batchState.completedCount >= 25 || batchState.isComplete;
+  const isBatchComplete = batchState.completedCount >= BATCH_SIZE || batchState.isComplete;
   const hasKey = activeKeysCount > 0;
 
   const handleCopyPrompt = (text: string) => {
@@ -162,18 +182,18 @@ export const PetaGeneratorView: React.FC<PetaGeneratorViewProps> = ({
                 BATCH #{batchState.batchNumber}
               </span>
               <span className="text-xs text-slate-400">
-                1 Batch = 25 Prompts = 1 Video YouTube
+                1 Batch = 20 Prompts = 1 Video YouTube
               </span>
             </div>
             <h2 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
               {isBatchComplete ? (
                 <span className="text-amber-400 flex items-center gap-2">
-                  BATCH COMPLETE — 25/25 STYLE PROMPTS COMPLETED
+                  BATCH COMPLETE — 20/20 STYLE PROMPTS COMPLETED
                 </span>
               ) : (
                 <span>
                   Suno Style Prompt Generator{' '}
-                  <span className="text-amber-400">#{nextNumber}</span> dari 25
+                  <span className="text-amber-400">#{nextNumber}</span> dari {BATCH_SIZE}
                 </span>
               )}
             </h2>
@@ -183,7 +203,7 @@ export const PetaGeneratorView: React.FC<PetaGeneratorViewProps> = ({
             <div className="text-right sm:mr-2">
               <div className="text-xs text-slate-400">Progress Batch</div>
               <div className="font-mono font-bold text-amber-400 text-sm">
-                {batchState.completedCount} / 25
+                {Math.min(batchState.completedCount, BATCH_SIZE)} / {BATCH_SIZE}
               </div>
             </div>
             <button
@@ -200,7 +220,7 @@ export const PetaGeneratorView: React.FC<PetaGeneratorViewProps> = ({
         <div className="mt-4 w-full h-2 bg-[#0e1017] rounded-full overflow-hidden border border-[#242938]">
           <div
             className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
-            style={{ width: `${(batchState.completedCount / 25) * 100}%` }}
+            style={{ width: `${(Math.min(batchState.completedCount, BATCH_SIZE) / BATCH_SIZE) * 100}%` }}
           />
         </div>
       </div>
@@ -287,6 +307,118 @@ export const PetaGeneratorView: React.FC<PetaGeneratorViewProps> = ({
             <span>Parameter Musikal & Konteks Estetika</span>
           </div>
           <span className="text-[11px] text-slate-400">Khusus Piano Instrumental</span>
+        </div>
+
+        {/* Title Analysis -> Auto Fill Musical Parameters */}
+        <div className="rounded-xl bg-[#0e111a] border border-amber-500/30 p-3.5 sm:p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                <Wand2 className="w-3.5 h-3.5" />
+              </div>
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                Title Analysis → Auto Fill Musical Parameters
+              </h4>
+            </div>
+            <span className="text-[10px] text-amber-400/90 font-mono bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+              Analisis Makna & Konteks Judul
+            </span>
+          </div>
+
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Masukkan judul musik Anda di bawah. Sistem akan menganalisis makna dan konteks judul secara akurat untuk mengisi Jenis Piano, Genre, Kategori Penggunaan, dan Mood secara otomatis.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="text"
+              value={inputTitle}
+              onChange={(e) => setInputTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAnalyzeTitle();
+                }
+              }}
+              placeholder="Contoh: Relaxing Piano Music with Calming Water Sounds for Deep Sleep and Meditation, Study Music"
+              className="flex-1 bg-[#141824] border border-[#252c3f] rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-500/70"
+            />
+            <button
+              type="button"
+              onClick={() => handleAnalyzeTitle()}
+              disabled={!inputTitle.trim()}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 hover:opacity-95 active:scale-[0.98] transition disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            >
+              <Wand2 className="w-3.5 h-3.5" />
+              <span>Analisis Judul</span>
+            </button>
+          </div>
+
+          {/* Quick Benchmark Example Pills */}
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <span className="text-[10px] text-slate-500 uppercase font-semibold mr-1">Contoh Cepat:</span>
+            <button
+              type="button"
+              onClick={() => {
+                const sample = 'Relaxing Piano Music with Calming Water Sounds for Deep Sleep and Meditation, Study Music';
+                setInputTitle(sample);
+                handleAnalyzeTitle(sample);
+              }}
+              className="px-2 py-1 rounded bg-[#181d2b] hover:bg-[#22293d] text-[10px] text-slate-300 border border-[#2a3145] transition text-left"
+            >
+              Relaxing Piano + Deep Sleep & Meditation, Study
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const sample = 'Intimate Felt Piano for Midnight Study & Deep Focus';
+                setInputTitle(sample);
+                handleAnalyzeTitle(sample);
+              }}
+              className="px-2 py-1 rounded bg-[#181d2b] hover:bg-[#22293d] text-[10px] text-slate-300 border border-[#2a3145] transition text-left"
+            >
+              Intimate Felt Piano Study
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const sample = 'Emotional Piano Music for Healing and Depression Relief';
+                setInputTitle(sample);
+                handleAnalyzeTitle(sample);
+              }}
+              className="px-2 py-1 rounded bg-[#181d2b] hover:bg-[#22293d] text-[10px] text-slate-300 border border-[#2a3145] transition text-left"
+            >
+              Healing & Depression Relief
+            </button>
+          </div>
+
+          {/* Feedback banner if analyzed */}
+          {analysisResult && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-2.5 text-xs text-amber-200 animate-in fade-in duration-200 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-amber-300 text-[11px]">
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Parameter Musikal Otomatis Diperbarui:</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-slate-300 pl-5">
+                <div>
+                  <span className="text-slate-400">1. Jenis Piano:</span>{' '}
+                  <span className="text-white font-semibold">{analysisResult.pianoType}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400">2. Genre Musik:</span>{' '}
+                  <span className="text-white font-semibold">{analysisResult.genre}</span>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-slate-400">3. Kategori Penggunaan ({analysisResult.categories.length}):</span>{' '}
+                  <span className="text-amber-300 font-semibold">{analysisResult.categories.join(', ')}</span>
+                </div>
+                <div className="sm:col-span-2">
+                  <span className="text-slate-400">4. Mood & Suasana ({analysisResult.moods.length}):</span>{' '}
+                  <span className="text-sky-300 font-semibold">{analysisResult.moods.join(', ')}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 1. Jenis Piano Instrumental (Single-select, 15 options) */}
@@ -421,7 +553,7 @@ export const PetaGeneratorView: React.FC<PetaGeneratorViewProps> = ({
         </div>
       </div>
 
-      {/* YouTube Content: after 25/25, first create the title from all 25 Style Prompts. */}
+      {/* YouTube Content: after 20/20, first create the title from all 20 Style Prompts. */}
       {isBatchComplete && (
         <div className="rounded-2xl bg-[#12151e] border border-red-500/30 p-5 sm:p-6 shadow-2xl space-y-6 animate-in fade-in duration-300">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#242a3a] pb-4">
@@ -433,10 +565,10 @@ export const PetaGeneratorView: React.FC<PetaGeneratorViewProps> = ({
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-extrabold text-white text-base tracking-wide uppercase">YOUTUBE CONTENT</h3>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-[10px] font-bold text-emerald-300 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> 25 Track Selesai
+                    <Check className="w-3 h-3" /> 20 Track Selesai
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">Judul dibuat dengan menganalisis Style Prompt #1–#25.</p>
+                <p className="text-xs text-slate-400 mt-0.5">Judul dibuat dengan menganalisis Style Prompt #1–#20.</p>
               </div>
             </div>
 
@@ -455,7 +587,7 @@ export const PetaGeneratorView: React.FC<PetaGeneratorViewProps> = ({
 
           {!youtubeTitle ? (
             <div className="pt-1">
-              <p className="text-xs text-slate-400 mb-3">Semua 25 Style Prompt sudah selesai. Tekan tombol di bawah untuk membuat 1 judul YouTube berdasarkan analisis Style Prompt #1–#25.</p>
+              <p className="text-xs text-slate-400 mb-3">Semua 20 Style Prompt sudah selesai. Tekan tombol di bawah untuk membuat 1 judul YouTube berdasarkan analisis Style Prompt #1–#20.</p>
               <button onClick={onGenerateYouTubeTitle} disabled={isGeneratingTitle || !hasKey} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black font-extrabold text-xs uppercase disabled:opacity-50 flex items-center justify-center gap-2">
                 {isGeneratingTitle ? 'MEMBUAT JUDUL...' : 'BUAT JUDUL'}
               </button>
@@ -479,7 +611,7 @@ export const PetaGeneratorView: React.FC<PetaGeneratorViewProps> = ({
                 <>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
-                      <label className="text-xs font-bold text-slate-300 tracking-wider uppercase"><span className="text-amber-400 font-mono">SEO DESCRIPTION</span> <span className="text-[10px] text-slate-400 font-normal">({youtubeSEO.description.split(/\s+/).filter(Boolean).length} kata • target 500–1.000 kata)</span></label>
+                      <label className="text-xs font-bold text-slate-300 tracking-wider uppercase"><span className="text-amber-400 font-mono">SEO DESCRIPTION</span> <span className="text-[10px] text-slate-400 font-normal">({youtubeSEO.description.split(/\s+/).filter(Boolean).length} kata • target sekitar 600–750 kata)</span></label>
                       <button onClick={() => handleCopyText(youtubeSEO.description, setCopiedDescription)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40">{copiedDescription ? 'COPIED DESCRIPTION' : 'COPY DESCRIPTION'}</button>
                     </div>
                     <div className="p-4 rounded-xl bg-[#0a0c12] border border-[#222838] text-slate-200 text-xs sm:text-sm leading-relaxed whitespace-pre-line select-all max-h-80 overflow-y-auto">{youtubeSEO.description}</div>
@@ -545,7 +677,7 @@ export const PetaGeneratorView: React.FC<PetaGeneratorViewProps> = ({
           ) : isBatchComplete ? (
             <>
               <Check className="w-5 h-5 text-emerald-400" />
-              <span>BATCH COMPLETE (25/25 STYLE PROMPTS) — KLIK NEW BATCH</span>
+              <span>BATCH COMPLETE (20/20 STYLE PROMPTS) — KLIK NEW BATCH</span>
             </>
           ) : (
             <>

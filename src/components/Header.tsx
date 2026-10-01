@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Music, CheckCircle2, AlertCircle, Sparkles, Download, Smartphone } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWA';
+import { BATCH_SIZE } from '../config/batch';
 
 interface HeaderProps {
   activeKeysCount: number;
@@ -67,8 +68,8 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Batch Progress Mini-badge */}
           <div className="hidden xs:flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-mono bg-[#181b24] border border-[#2b3040] text-slate-300">
-            <span className="text-amber-400 font-bold">#{completedCount}</span>
-            <span className="text-slate-500">/25</span>
+            <span className="text-amber-400 font-bold">{Math.min(completedCount, BATCH_SIZE)}</span>
+            <span className="text-slate-500">/20</span>
           </div>
 
           {/* Diagnostics / QC Quick Button */}

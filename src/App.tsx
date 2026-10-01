@@ -4,6 +4,7 @@ import { Navigation, TabId } from './components/Navigation';
 import { PetaGeneratorView } from './components/PetaGeneratorView';
 import { TracklistView } from './components/TracklistView';
 import { ApiManagerView } from './components/ApiManagerView';
+import { CreateSeoFromTitleView } from './components/CreateSeoFromTitleView';
 import { NewBatchModal } from './components/NewBatchModal';
 import { QCModal } from './components/QCModal';
 
@@ -21,8 +22,10 @@ import { DEFAULT_SETTINGS } from './config/options';
 import { DEFAULT_MODEL_ID } from './config/models';
 import { ApiKeyManager } from './services/apiKeyManager';
 import { BatchManager } from './services/batchManager';
+import { BATCH_SIZE } from './config/batch';
 import { TracklistStore } from './services/tracklistStore';
 import { executeGeneration, generateYouTubeTitle, generateYouTubeSEO, generateYouTubeThumbnailText } from './services/kieClient';
+import { cleanCoreTitle } from './services/youtubeSeoValidator';
 import { fetchKieCredit } from './services/creditChecker';
 import { useOnlineStatus } from './hooks/usePWA';
 
@@ -214,13 +217,13 @@ export default function App() {
     setThumbnailError(null);
   };
 
-  // Step 1: after 25 Style Prompts are complete, generate ONLY the YouTube title from all #1–#25.
+  // Step 1: after 20 Style Prompts are complete, generate ONLY the YouTube title from all #1–#20.
   // SEO/hashtags/tags are a separate package handled by REGENERATE SEO.
   const handleGenerateYouTubeTitle = async () => {
-    if (batchState.completedCount < 25 || !batchState.isComplete || isGeneratingTitle) return;
-    const completedBatchTracks = tracks.slice(0, 25);
-    if (completedBatchTracks.length < 25) {
-      setTitleError('25 style prompt berhasil belum tersedia di tracklist.');
+    if (batchState.completedCount < BATCH_SIZE || !batchState.isComplete || isGeneratingTitle) return;
+    const completedBatchTracks = tracks.slice(0, BATCH_SIZE);
+    if (completedBatchTracks.length < BATCH_SIZE) {
+      setTitleError('20 style prompt berhasil belum tersedia di tracklist.');
       return;
     }
 
@@ -249,10 +252,10 @@ export default function App() {
   };
 
   const handleRegenerateSEO = async () => {
-    if (batchState.completedCount < 25 || !batchState.isComplete || isRegeneratingSEO) return;
-    const completedBatchTracks = tracks.slice(0, 25);
-    if (completedBatchTracks.length < 25) {
-      setSeoError('25 style prompt berhasil belum tersedia di tracklist.');
+    if (batchState.completedCount < BATCH_SIZE || !batchState.isComplete || isRegeneratingSEO) return;
+    const completedBatchTracks = tracks.slice(0, BATCH_SIZE);
+    if (completedBatchTracks.length < BATCH_SIZE) {
+      setSeoError('20 style prompt berhasil belum tersedia di tracklist.');
       return;
     }
     setIsRegeneratingSEO(true);
@@ -266,7 +269,8 @@ export default function App() {
         (msg) => setStatusMessage(msg)
       );
       if (result.success) {
-        const fullTitle = `${result.seo.title} + Bamboo Water Sound`;
+        const baseTitle = cleanCoreTitle(result.seo.title);
+        const fullTitle = `${baseTitle} + Bamboo Water Sound`;
         const updated = BatchManager.getInstance().setYouTubeSEO({ ...result.seo, title: fullTitle });
         setBatchState(updated);
         setYoutubeSEO(updated.youtubeSEO || null);
@@ -458,6 +462,15 @@ export default function App() {
             onRequestNewBatch={() => setShowNewBatchModal(true)}
             onExportText={handleExportText}
             onExportJSON={handleExportJSON}
+          />
+        )}
+
+        {activeTab === 'seo-title' && (
+          <CreateSeoFromTitleView
+            selectedModelId={selectedModelId}
+            routingMode={routingMode}
+            hasActiveKey={activeKeysCount > 0}
+            onSwitchToAPI={() => setActiveTab('api')}
           />
         )}
 
